@@ -9,7 +9,7 @@ using BitMiracle.LibTiff.Classic;
 using System.Drawing;
 using System.Drawing.Imaging;
 
-namespace OAResize
+namespace BarebonesImageLibrary
 {
     /// <summary>
     /// A 1-bit TIF image consisting only of width, width with pad, heigth and the bytestream.

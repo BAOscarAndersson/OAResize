@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Diagnostics;
 using BitMiracle.LibTiff.Classic;
+using BarebonesImageLibrary;
 
 namespace OAResize
 {
