@@ -468,7 +468,7 @@ namespace OAResize
             {
                 case "up":
                     //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
-                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
+                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
                     break;
                 case "down":
                     //The stream is inserted into the difference of the two streams so it ends up in the bottom.
