@@ -452,28 +452,39 @@ namespace OAResize
             int originalWidth = processImage.Width;
             int originalHeight = processImage.Height;
             int originalWidthWithPad = processImage.WidthWithPad;
-
+            
             //Scales the image to the scale of the blue zone.
             resizedImage = processImage.DownsizeHeight(Processes[index].Scale);
+            
+            /* The resized image size needs to be changed back to the original size
+             * so the end up in the correct place on the printing plate.
+             * This is done by inserting its bytestream into an empty bytestream of the original size*/
+            byte[] tempImageBytestream = new byte[originalHeight * originalWidthWithPad / 8];
+
+            /* The image will be inserted at different place depending on where in the machine the plate will go, 
+             * this is determinied by it's zoneCylinder code wich is added to the file name and specified in OARConfig.txt*/
+            
             switch (Processes[index].MoveThisWay)
             {
                 case "up":
-                    //blankImage.Insert(resizedImage, 0, 0);
-                    resizedImage.Height = originalHeight;
-                    resizedImage.Width = originalWidth;
-                    resizedImage.WidthWithPad = originalWidthWithPad;
-                    byte[] tempImageBytestream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
-                    resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
-                    resizedImage.ImageByteStream = tempImageBytestream;
+                    //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
+                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
                     break;
                 case "down":
-                   // blankImage.Insert(resizedImage, 0, blankImage.Height - blankImage.Height);
+                    //The stream is inserted into the difference of the two streams so it ends up in the bottom.
+                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
                     break;
                 default:
-                    //blankImage.Insert(resizedImage, 0, (blankImage.Height - blankImage.Height) / 2);
+                    //The default makes the image end up in the middle.
+                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
                     break;
             }
+
+            resizedImage.Height = originalHeight;
+            resizedImage.Width = originalWidth;
+            resizedImage.WidthWithPad = originalWidthWithPad;
+            resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
+            resizedImage.ImageByteStream = tempImageBytestream;
 
             //Saves the result of the above processing.
             resizedImage.SaveAsTIFF(pathAndFileTo);
