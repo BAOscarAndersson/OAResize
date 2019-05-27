@@ -93,7 +93,7 @@ namespace OAResize
             string[] allFilesInDir = Directory.GetFiles(folderPath, "*.TIF");
             if (allFilesInDir.Length > 1)
             {
-                logg("ERROR - " + DateTime.Now.ToString("yyyyMMdd HH: mm") + " - More than one .TIF present in " + folderPath);
+                logg("Warning - " + DateTime.Now.ToString("yyyyMMdd HH: mm") + " - More than one .TIF present in " + folderPath);
                 Console.WriteLine(" Remove the files and press any key.");
                 Console.ReadKey();
             }
@@ -118,6 +118,8 @@ namespace OAResize
                         string sourceFile = Path.Combine(dirPaths.source, fileName);
                         string middleFile = Path.Combine(dirPaths.middle, fileName);
 
+                        //Wait a bit before trying to move the file to avoid any IO problems.
+                        System.Threading.Thread.Sleep(100);
                         File.Move(sourceFile, middleFile);
 
                         Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - " + allFilesInDir[0] + " moved to buffer.");
@@ -137,6 +139,9 @@ namespace OAResize
                         //Get the full filenames for both files.
                         string middleFile = Path.Combine(dirPaths.middle, fileName);
                         string destFile = Path.Combine(dirPaths.target, fileName);
+
+                        //Wait a bit before trying to move the file to avoid any IO problems.
+                        System.Threading.Thread.Sleep(100);
 
                         //Move the file to a .tmp file and then "move" it again to rename it. The CTP wants it thus.
                         File.Move(middleFile, destFile + @".tmp");
@@ -428,7 +433,6 @@ namespace OAResize
         {
             BarebonesImage processImage = new BarebonesImage();
             BarebonesImage resizedImage = new BarebonesImage();
-            BarebonesImage blankImage = new BarebonesImage();
 
             Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing " + fileTo);
 
@@ -443,11 +447,9 @@ namespace OAResize
             }
             
             string pathAndFileTo = Path.Combine(dirPaths.middle, fileTo);
-            //string blankPathAndFile = Path.Combine(dirPaths.regMarks, loadConfig.ReadString("blankImage").First());
 
             //Load the image that was moved from the source folder.
             processImage = processImage.ReadATIFF(pathAndFileTo);
-            //blankImage = blankImage.ReadATIFF(blankPathAndFile);
 
             int originalWidth = processImage.Width;
             int originalHeight = processImage.Height;
@@ -455,15 +457,17 @@ namespace OAResize
             
             //Scales the image to the scale of the blue zone.
             resizedImage = processImage.DownsizeHeight(Processes[index].Scale);
-            
+
+            //Outputs the resized width and height so you easyily can see changes you make to the "Scale" factor in OARconfig.txt
+            Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - " + fileTo + " resized to: " + resizedImage.Width + " * " + resizedImage.Height);
+
             /* The resized image size needs to be changed back to the original size
              * so the end up in the correct place on the printing plate.
              * This is done by inserting its bytestream into an empty bytestream of the original size*/
             byte[] tempImageBytestream = new byte[originalHeight * originalWidthWithPad / 8];
 
-            /* The image will be inserted at different place depending on where in the machine the plate will go, 
+            /* The image will be padded at different place depending on where in the machine the plate will go, 
              * this is determinied by it's zoneCylinder code wich is added to the file name and specified in OARConfig.txt*/
-            
             switch (Processes[index].MoveThisWay)
             {
                 case "up":
@@ -480,9 +484,12 @@ namespace OAResize
                     break;
             }
 
+            //The resized have been padded with so it's the size of the original once again. 
             resizedImage.Height = originalHeight;
             resizedImage.Width = originalWidth;
             resizedImage.WidthWithPad = originalWidthWithPad;
+
+            //The padded bytestream is inserted to the resized image.
             resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
             resizedImage.ImageByteStream = tempImageBytestream;
 

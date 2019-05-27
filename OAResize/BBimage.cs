@@ -134,17 +134,16 @@ namespace BarebonesImageLibrary
         /// <returns>A BarebonesImage.</returns>
         public BarebonesImage ReadATIFF(string fileToRead)
         {
+            //Overrides the error handler so that it won't spit out a bunch of warnings.
+            BBErrorHandler bbErrorHandler = new BBErrorHandler();
+            Tiff.SetErrorHandler(bbErrorHandler);
+            
             Tiff inputImage = Tiff.Open(fileToRead, "r");
             BarebonesImage bbReturnImage = new BarebonesImage
             {
                 width = inputImage.GetField(TiffTag.IMAGEWIDTH)[0].ToInt(),
                 height = inputImage.GetField(TiffTag.IMAGELENGTH)[0].ToInt()
             };
-
-            //Overrides the error handler so that it won't spit out a bunch of warnings.
-            BBErrorHandler bbErrorHandler = new BBErrorHandler();
-            Tiff.SetErrorHandler(bbErrorHandler);
-
 
             #region Check that the file is of the correct format. Lots of boring code.
             int samplesPerPixel = inputImage.GetField(TiffTag.SAMPLESPERPIXEL)[0].ToInt();
@@ -182,8 +181,7 @@ namespace BarebonesImageLibrary
             //    throw new ArgumentException("yres must be 1200");
 
             #endregion
-
-
+            
             //Images are padded with zeros so the images consist of whole bytes.
             bbReturnImage.widthWithPad = bbReturnImage.width + bbReturnImage.CalculatePad(bbReturnImage.width);
 
