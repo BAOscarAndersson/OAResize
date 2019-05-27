@@ -99,7 +99,7 @@ namespace OAResize
             }
             else if (allFilesInDir.Length == 0)
             {
-                //If there are no files in the buffer folder the program does nothing.
+                //If there are no files in the folder the program does nothing.
             }
             else
             {
