@@ -18,38 +18,12 @@ namespace BarebonesImageLibrary
     public class BarebonesImage
     {
         //A few things that makes up a barebones image.
-        private int height;
-        private int width;
-        private int widthWithPad;
+        private int Height{ get; set; }
+        private int Width{ get; set; }
+        private int WidthWithPad { get; set; }
 
-        private byte[] imageByteStream;
+        private byte[] ImageByteStream { get; set; }
 
-        #region A bunch of gets and sets for all those private things above.
-        public int Height
-        {
-            get => height;
-            set => height = value;
-        }
-
-        public int Width
-        {
-            get => width;
-            set => width = value;
-        }
-
-        public int WidthWithPad
-        {
-            get => widthWithPad;
-            set => widthWithPad = value;
-        }
-
-        public byte[] ImageByteStream
-        {
-            get => imageByteStream;
-            set => imageByteStream = value;
-        }
-        #endregion
-        
         /// <summary>
         /// Get the value of a pixel in the image.
         /// </summary>
@@ -61,7 +35,7 @@ namespace BarebonesImageLibrary
             bool twoBool = new bool();
 
             //if one of the coordinates are outside of the image return false.
-            if (x >= width || y >= height || x <= 0 || y <= 0)
+            if (x >= Width || y >= Height || x <= 0 || y <= 0)
             {
 
                 return false;
@@ -72,7 +46,7 @@ namespace BarebonesImageLibrary
             x--;
             y--;
 
-            twoBool = GetBit(imageByteStream[y * widthWithPad / 8 + x / 8], 7 - x % 8);
+            twoBool = GetBit(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8);
             
             return twoBool;
         }
@@ -87,7 +61,7 @@ namespace BarebonesImageLibrary
         internal bool SetPixel(int x, int y, Boolean value)
         {
             //if one of the coordinates are outside of the image return false (failure to set.)
-            if (x >= width || y >= height || x <= 0 || y <= 0)
+            if (x >= Width || y >= Height || x <= 0 || y <= 0)
             {
                 return false;
             }
@@ -98,7 +72,7 @@ namespace BarebonesImageLibrary
 
             /* y*widthWithPad/8+x/8 converts the x and y coordinate to a the pixels byte-position. 
              * 7-x%8 converts a pixels x coordinate to its place within a byte.*/
-            imageByteStream[y * widthWithPad / 8 + x / 8] = SetByte(imageByteStream[y * widthWithPad / 8 + x / 8], 7 - x % 8, value);
+            ImageByteStream[y * WidthWithPad / 8 + x / 8] = SetByte(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8, value);
 
             return true;
         }
@@ -139,10 +113,10 @@ namespace BarebonesImageLibrary
             Tiff.SetErrorHandler(bbErrorHandler);
             
             Tiff inputImage = Tiff.Open(fileToRead, "r");
-            BarebonesImage bbReturnImage = new BarebonesImage
+            BarebonesImage bbImage = new BarebonesImage
             {
-                width = inputImage.GetField(TiffTag.IMAGEWIDTH)[0].ToInt(),
-                height = inputImage.GetField(TiffTag.IMAGELENGTH)[0].ToInt()
+                Width = inputImage.GetField(TiffTag.IMAGEWIDTH)[0].ToInt(),
+                Height = inputImage.GetField(TiffTag.IMAGELENGTH)[0].ToInt()
             };
 
             #region Check that the file is of the correct format. Lots of boring code.
@@ -183,9 +157,9 @@ namespace BarebonesImageLibrary
             #endregion
             
             //Images are padded with zeros so the images consist of whole bytes.
-            bbReturnImage.widthWithPad = bbReturnImage.width + bbReturnImage.CalculatePad(bbReturnImage.width);
+            bbImage.WidthWithPad = bbImage.Width + bbImage.CalculatePad(bbImage.Width);
 
-            bbReturnImage.imageByteStream = new byte[bbReturnImage.widthWithPad / 8 * bbReturnImage.height];
+            bbImage.ImageByteStream = new byte[bbImage.WidthWithPad / 8 * bbImage.Height];
 
             // Read for multiple strips
             int stripSize = inputImage.StripSize();
@@ -195,7 +169,7 @@ namespace BarebonesImageLibrary
             // Goes through all the strips and put them into a single bytestream in the barebonesImage.
             for (int stripCount = 0; stripCount < stripMax; stripCount++)
             {
-                int result = inputImage.ReadEncodedStrip(stripCount, bbReturnImage.imageByteStream, imageOffset, stripSize);
+                int result = inputImage.ReadEncodedStrip(stripCount, bbImage.ImageByteStream, imageOffset, stripSize);
                 if (result == -1)
                 {
                     Console.Error.WriteLine("Read error on input strip number {0}", stripCount);
@@ -206,7 +180,7 @@ namespace BarebonesImageLibrary
             
             inputImage.Close();
             
-            return bbReturnImage;
+            return bbImage;
         }
 
         /// <summary>
@@ -241,12 +215,12 @@ namespace BarebonesImageLibrary
                 #endregion
 
                 //Sets the width and height to that of the BarebonesImage
-                image.SetField(TiffTag.IMAGEWIDTH, width);
-                image.SetField(TiffTag.IMAGELENGTH, height);
-                image.SetField(TiffTag.ROWSPERSTRIP, height);
+                image.SetField(TiffTag.IMAGEWIDTH, Width);
+                image.SetField(TiffTag.IMAGELENGTH, Height);
+                image.SetField(TiffTag.ROWSPERSTRIP, Height);
 
                 // Write the information to the file
-                image.WriteEncodedStrip(0, imageByteStream, widthWithPad / 8 * height);
+                image.WriteEncodedStrip(0, ImageByteStream, WidthWithPad / 8 * Height);
 
             }
 
@@ -254,64 +228,42 @@ namespace BarebonesImageLibrary
         }
 
         /// <summary>
-        /// Takes two Mergeables and merges them into a single Mergeable, consisting of both images.
+        /// Takes two BBImages and merges them into a single BBImage.
         /// </summary>
-        /// <param name="Left">The Mergeable that will be to the left in the new Mergeable.</param>
-        /// <param name="Right">The Mergeable that will be to the right in the new Mergeable.</param>
+        /// <param name="Left">The BBImage that will be to the left in the new BBImage.</param>
+        /// <param name="Right">The BBImage that will be to the right in the new BBImage.</param>
         /// <returns>True upon completion</returns>
         public bool Merge(BarebonesImage Left, BarebonesImage Right)
         {
             //Width of the merged image is the widths of both the input images.
-            width = Left.width + Right.width;
+            Width = Left.Width + Right.Width;
 
             //Padding for width is recalculated.
-            widthWithPad = width + CalculatePad(width);
+            WidthWithPad = Width + CalculatePad(Width);
 
             //Sets the height of the merged image to the tallest of the input images.
-            if (Left.height > Right.height)
+            if (Left.Height > Right.Height)
             {
-                height = Left.height;
+                Height = Left.Height;
             }
-            else if (Left.height < Right.height)
+            else if (Left.Height < Right.Height)
             {
-                height = Right.height;
+                Height = Right.Height;
 
             }
             else
-                height = Left.height;
+                Height = Left.Height;
 
             //Initilize the byte array for the merged image.
-            imageByteStream = new byte[widthWithPad / 8 * height];
+            ImageByteStream = new byte[WidthWithPad / 8 * Height];
             
-            /* Loop through all the pixles in the left image
-             * and insert them to the left in the new image.
-             * Offset it vertically so it ends up in the middle.*/
-            int verticalOffset = (height - Left.height) / 2;
+            // The image is offset vertically so it ends up in the middle.
+            int verticalOffset = (Height - Left.Height) / 2;
+            this.Insert(Left, verticalOffset, 0);
 
-            for (int i = 1; i <= Left.height; i++)
-            {
-                for (int j = 1; j <= Left.width; j++)
-                {
-
-                    SetPixel(j, i + verticalOffset, Left.GetPixel(j, i));
-
-                }
-            }
-
-            /* Loop through all the pixles in the right image
-             * and insert them to the right in the new image.
-             * Offset it vertically so it ends up in the middle.
-             * And offset horizontally so it ends up to the right*/
-            verticalOffset = (height - Right.height) / 2;
-            for (int i = 1; i <= Right.height; i++)
-            {
-                for (int j = 1; j <= Right.width; j++)
-                {
-
-                    SetPixel(j + Left.width, i + verticalOffset, Right.GetPixel(j, i));
-
-                }
-            }
+            //Offset recalculated for the right image.
+            verticalOffset = (Height - Right.Height) / 2;
+            this.Insert(Right, verticalOffset, 0);
 
             return true;
         }
@@ -602,14 +554,14 @@ namespace BarebonesImageLibrary
         public bool BitmapToBBImage(Bitmap inputBitmap)
         {
             //New dimensions of the BBImage
-            this.width = inputBitmap.Width;
-            this.height = inputBitmap.Height;
+            this.Width = inputBitmap.Width;
+            this.Height = inputBitmap.Height;
 
             //Padding for width is recalculated.
-            widthWithPad = width;
-            while ((widthWithPad % 8) != 0)
+            WidthWithPad = Width;
+            while ((WidthWithPad % 8) != 0)
             {
-                widthWithPad++;
+                WidthWithPad++;
             }
 
             Rectangle rect = new Rectangle(0, 0, inputBitmap.Width, inputBitmap.Height);
@@ -640,10 +592,10 @@ namespace BarebonesImageLibrary
 
             BarebonesImage smallerImage = new BarebonesImage();
             
-            smallerImage.Width = this.width;
-            smallerImage.Height = Convert.ToInt32(Math.Truncate((double)this.height * ((double)1 - ((double)1 / (double)scale))));
-            smallerImage.WidthWithPad = smallerImage.width + CalculatePad(smallerImage.width);
-            smallerImage.ImageByteStream = new byte[smallerImage.widthWithPad / 8 * smallerImage.height];
+            smallerImage.Width = this.Width;
+            smallerImage.Height = Convert.ToInt32(Math.Truncate((double)this.Height * ((double)1 - ((double)1 / (double)scale))));
+            smallerImage.WidthWithPad = smallerImage.Width + CalculatePad(smallerImage.Width);
+            smallerImage.ImageByteStream = new byte[smallerImage.WidthWithPad / 8 * smallerImage.Height];
 
 
 
@@ -652,12 +604,12 @@ namespace BarebonesImageLibrary
              * in a position modulo scale in which case they are dropped.*/
             int x = 1;
             int y = 1;
-            for (int i = 1; i <= this.width; i++)
+            for (int i = 1; i <= this.Width; i++)
             {
                 x += 1;
                 y = 1;
 
-                for (int j = 1; j <= this.height; j++)
+                for (int j = 1; j <= this.Height; j++)
                 {
 
                     if (j % scale == 0)
@@ -681,6 +633,7 @@ namespace BarebonesImageLibrary
         /// <returns>True upon completion</returns>
         public bool Insert(BarebonesImage insertImage, int x, int y)
         {
+
             /* Loop through all the pixles in the image to be inserted.
              * Offset it vertically so it ends up in the right position*/
 
