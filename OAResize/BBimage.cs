@@ -18,11 +18,11 @@ namespace BarebonesImageLibrary
     public class BarebonesImage
     {
         //A few things that makes up a barebones image.
-        private int Height{ get; set; }
-        private int Width{ get; set; }
-        private int WidthWithPad { get; set; }
+        internal int Height{ get; set; }
+        internal int Width { get; set; }
+        internal int WidthWithPad { get; set; }
 
-        private byte[] ImageByteStream { get; set; }
+        internal byte[] ImageByteStream { get; set; }
 
         /// <summary>
         /// Get the value of a pixel in the image.

@@ -60,7 +60,7 @@ namespace OAResize
             {
                 if (!Directory.Exists(path))
                 {
-                    errors.Add("ERROR - " + DateTime.Now.ToString("yyyyMMdd HH:mm") + " - Directory " + path + " does not exist.");
+                    errors.Add("ERROR - " + DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Directory " + path + " does not exist.");
                 }
             }
 
@@ -93,7 +93,7 @@ namespace OAResize
             string[] allFilesInDir = Directory.GetFiles(folderPath, "*.TIF");
             if (allFilesInDir.Length > 1)
             {
-                logg("Warning - " + DateTime.Now.ToString("yyyyMMdd HH: mm") + " - More than one .TIF present in " + folderPath);
+                logg("Warning - " + DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - More than one .TIF present in " + folderPath);
                 Console.WriteLine(" Remove the files and press any key.");
                 Console.ReadKey();
             }
@@ -387,6 +387,8 @@ namespace OAResize
     /// </summary>
     internal class Phase
     {
+        private readonly List<string> fileBuffer;
+
         /// <summary>
         /// Does input things and validates the paths.
         /// </summary>
@@ -396,6 +398,7 @@ namespace OAResize
         /// <returns>The name of the file if a file was moved, null otherwise.</returns>
         internal string Input(Action<string> logg, DirPaths dirPaths, MoveFile moveFile)
         {
+            #region Validation of the maps
             /*The output map is often a mapped network drive,
                so if the map doesn't validate we continue to try at regular intervals
                as the drive might just be offline temporarily.*/
@@ -419,8 +422,22 @@ namespace OAResize
             }
             if (i > 0)
                 Console.WriteLine("Validated");
+            #endregion
 
-            return moveFile.FromDir(dirPaths.source, logg, dirPaths);
+            if (fileBuffer.Count > 0 && fileBuffer.Count < 3)
+            {
+                fileBuffer.Add(moveFile.FromDir(dirPaths.source, logg, dirPaths));
+                return null;
+            }
+            else if (fileBuffer.Count > 0 && fileBuffer.Count == 3)
+            {
+                string tempReturn = fileBuffer.First();
+                fileBuffer.RemoveAt(0);
+                return tempReturn;
+            }
+
+
+                return moveFile.FromDir(dirPaths.source, logg, dirPaths);
         }
 
         /// <summary>
