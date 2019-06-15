@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using System.Diagnostics;
+using System.Configuration;
 using BitMiracle.LibTiff.Classic;
 using BarebonesImageLibrary;
 
@@ -312,32 +313,16 @@ namespace OAResize
         }
     }
 
+
+
     /// <summary>
     /// The way a file will be processed is determined by this class.
     /// </summary>
     internal class ZoneCylinderProcess
     {
-        /* name is the name of the zoneCylinders, specified in OARconfig.txt under "zoneCylinders".
-         * scale is how much the images with "name" in their file name will be shrunk.
-         * moveThisWay, the way images with "name" in their file name will be moved.*/
-        private string name;
-        private int scale;
-        private string moveThisWay;
-
-        #region gets the aboves.
-        public int Scale
-        {
-            get => scale;
-        }
-        public string MoveThisWay
-        {
-            get => moveThisWay;
-        }
-        public string Name
-        {
-            get => name;
-        }
-        #endregion
+        public int Scale { get; }
+        public string MoveThisWay { get; }
+        public string Name { get; }
 
         /// <summary>
         /// A class of this type is created for a zoneCylinder which is the input which becomes the name.
@@ -348,12 +333,12 @@ namespace OAResize
         /// <param name="dirPaths">Where the folders of the programs are located.</param>
         internal ZoneCylinderProcess(string zoneCylinder, LoadConfig loadConfig, DirPaths dirPaths)
         {
-            name = zoneCylinder;
+            Name = zoneCylinder;
             List<string> parametersOfProcess= loadConfig.ReadString(zoneCylinder);
             
             if (Int32.TryParse(parametersOfProcess.First(), out int tempInt))
             {
-                scale = tempInt;
+                Scale = tempInt;
             }
             else
             {
@@ -362,7 +347,7 @@ namespace OAResize
                 Environment.Exit(0);
             }
             parametersOfProcess.RemoveAt(0);
-            moveThisWay = parametersOfProcess.First();
+            MoveThisWay = parametersOfProcess.First();
         }
         
     }
@@ -437,7 +422,7 @@ namespace OAResize
             }
 
 
-                return moveFile.FromDir(dirPaths.source, logg, dirPaths);
+            return moveFile.FromDir(dirPaths.source, logg, dirPaths);
         }
 
         /// <summary>
@@ -546,8 +531,9 @@ namespace OAResize
             Phase phase = new Phase();
             ZoneCylinderParsingInformation parsingInfo = new ZoneCylinderParsingInformation();
             Action<string> logg = (str) => Logg.Text(str, dirPaths);
+            ReadConfig readConfig = new ReadConfig();
             #endregion
-
+            readConfig.ReadAllSettings();
             #region Load a bunch of parameters from the config file.
 
             //Files with file names with the entries of this lists in them will be processed. 
@@ -568,6 +554,8 @@ namespace OAResize
             parsingInfo.start -= 1;                                                         //C# starts to count at zero.
             parsingInfo.length = loadConfig.ReadNumber("zoneCylinderLength").First();
             #endregion
+
+
 
             //Forever loop for now. Main loop of the program.
             string toExitOrNot = @"Never Exit";
