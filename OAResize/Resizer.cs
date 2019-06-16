@@ -34,6 +34,10 @@ namespace OAResize
          * these images are saved in this folder.*/
         internal string regMarks;
 
+        internal string leadRegMark;
+        internal string trailRegMark;
+        internal string blankRegMark;
+
         /* File that contains the information about how to process the images,
          * which is determined by how the situation looks in the press.*/
         internal string pressConfig;
@@ -48,6 +52,9 @@ namespace OAResize
             Log = readConfig.ReadString("Log");
 
             regMarks = readConfig.ReadString("regMarks");
+            leadRegMark = readConfig.ReadString("leadRegMark");
+            trailRegMark = readConfig.ReadString("trailRegMark");
+            blankRegMark = readConfig.ReadString("blankRegMark");
 
             pressConfig = System.AppDomain.CurrentDomain.BaseDirectory;
             pressConfig = Path.Combine(pressConfig, readConfig.ReadString("pressConfig"));
@@ -213,114 +220,6 @@ namespace OAResize
     }
 
     /// <summary>
-    /// Many of the variables in the program can be modified using a configure file called OARConfig.txt.
-    /// This class handles the reading of this configure file.
-    /// </summary>
-    internal class LoadConfig
-    {
-        /// <summary>
-        /// Function is called to read a string from OARConfig.txt
-        /// </summary>
-        /// <param name="variableToConfig">The parameter to get from the config file.</param>
-        /// <returns>The string after "=".</returns>
-        private string Read(string variableToConfig)
-        {
-            //The path where the OARConfig is located
-            string pathFile = System.AppDomain.CurrentDomain.BaseDirectory;
-            pathFile = string.Concat(pathFile, "OARConfig.txt");
-
-            //The config file must exist if it doesn't the program wont work.
-            if (!File.Exists(pathFile))
-            {
-                Console.WriteLine(pathFile + "OARConfig.txt file does not exist. Press any key to exit.");
-                Console.ReadKey();
-                Environment.Exit(0);
-            }
-
-            /*Reads all the lines in the config file and looks for the inputed string,
-             * it looks at the first "word" separated by a space(tab or " ").
-             * When found it will look for an "=" and try to convert the string after that to an int.*/
-            using (StreamReader readString = new StreamReader(pathFile))
-            {
-                while (readString.Peek() >= 0)
-                {
-                    string tempLine = readString.ReadLine();
-                    if (tempLine.Split('\t', ' ').First().Equals(variableToConfig))
-                    {
-                        return tempLine.Substring(tempLine.IndexOf(@"=") + 1);
-                    }
-                }
-            }
-
-            Console.WriteLine("ERROR " + variableToConfig + " Not found in config file. Press any key to exit.");
-            Console.ReadKey();
-            Environment.Exit(0);
-
-            //Very smooth return value.
-            return "ERRORS abound, this one shouldn't have happend at all. The program should have quit at the line above.";
-        }
-
-        /// <summary>
-        /// Called to read a number variable from the config file,
-        /// such as a time, coordinates, scaling factors and parsing information.
-        /// </summary>
-        /// <param name="variableToConfig">The variable to be read.</param>
-        /// <returns>Time in milliseconds, or x,y-coordinates.</returns>
-        internal List<int> ReadNumber(string variableToConfig)
-        {
-            List<int> parameters = new List<int>();
-
-            //Gets the string associated with the variable to be configured.
-            variableToConfig = this.Read(variableToConfig);
-
-            //Seperates the values in the case of multiple ones such as x and y coordinates.
-            string[] stringParameters = variableToConfig.Split(',');
-
-            //Goes through all the parameters and add them to the list.
-            foreach (string stringParameter in stringParameters)
-            {
-                if (Int32.TryParse(stringParameter, out int tempInt))
-                {
-                    parameters.Add(tempInt);
-                }
-                else
-                {
-                    Console.WriteLine(variableToConfig + " could not be parsed. Press any key to exit.");
-                    Console.ReadKey();
-                    Environment.Exit(0);
-                }
-            }
-
-            return parameters;
-        }
-
-        /// <summary>
-        /// Called to read a string parameter from the config file. Such as paths, file names and zone names.
-        /// Since zone names can be any number of parameters this is returned as a list.
-        /// </summary>
-        /// <param name="variableToConfig">The variable get the parameter values for.</param>
-        /// <returns>A list of parameters associated with the input variable in the config file.</returns>
-        internal List<string> ReadString(string variableToConfig)
-        {
-            List<string> parameters = new List<string>();
-
-            variableToConfig = this.Read(variableToConfig);
-
-            //Parameters are seperated by "," in the config file so it split up on this basis.
-            string[] tempParameters = variableToConfig.Split(',');
-
-            foreach (string tempParameter in tempParameters)
-            {
-
-                parameters.Add(tempParameter);
-
-            }
-
-            return parameters;
-        }
-    }
-
-    /// <summary>
     /// Reads the XML config file, PressConfig.xml, which contains values specific to the press. 
     /// Such as fanout per tower and how much the plate-locks are offset.
     /// </summary>
@@ -399,43 +298,6 @@ namespace OAResize
     }
 
     /// <summary>
-    /// The way a file will be processed is determined by this class.
-    /// </summary>
-    internal class ZoneCylinderProcess
-    {
-        public int Scale { get; }
-        public string MoveThisWay { get; }
-        public string Name { get; }
-
-        /// <summary>
-        /// A class of this type is created for a zoneCylinder which is the input which becomes the name.
-        /// The other variables are read from OARconfig.txt
-        /// </summary>
-        /// <param name="zoneCylinder">This will be searched for in inputed images file name.</param>
-        /// <param name="folderPath">The folder to move the file from.</param>     
-        /// <param name="dirPaths">Where the folders of the programs are located.</param>
-        internal ZoneCylinderProcess(string zoneCylinder, LoadConfig loadConfig, DirPaths dirPaths)
-        {
-            Name = zoneCylinder;
-            List<string> parametersOfProcess = loadConfig.ReadString(zoneCylinder);
-
-            if (Int32.TryParse(parametersOfProcess.First(), out int tempInt))
-            {
-                Scale = tempInt;
-            }
-            else
-            {
-                Console.WriteLine(parametersOfProcess.First() + " could not be parsed. Should be a positive integer for the scale factor. Press any key to exit.");
-                Console.ReadKey();
-                Environment.Exit(0);
-            }
-            parametersOfProcess.RemoveAt(0);
-            MoveThisWay = parametersOfProcess.First();
-        }
-
-    }
-
-    /// <summary>
     /// Contains the information of which characters in the filename that will determine how
     /// the file will be processed. 
     /// Both of the variables are loaded form OARConfig.txt.
@@ -454,6 +316,12 @@ namespace OAResize
         internal ushort sectionLength;
         internal ushort halfStart;
         internal ushort halfLength;
+    }
+
+    internal struct RegisterMarksCoordinates
+    {
+        internal Tuple<int, int> lead;
+        internal Tuple<int, int> trail;
     }
 
     /// <summary>
@@ -505,7 +373,7 @@ namespace OAResize
         /// </summary>
         /// <param name = "fileToProcess" > The filename of the.TIF file to process, path not included.</param>
         /// <returns>True upon completion.</returns>
-        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths, LoadConfig loadConfig)
+        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths)
         {
             BarebonesImage processImage = new BarebonesImage();
             BarebonesImage resizedImage = new BarebonesImage();
@@ -603,6 +471,14 @@ namespace OAResize
             resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
             resizedImage.ImageByteStream = tempImageBytestream;
 
+            if(MoveThisWay != "middle" && rollPosition.Length > 2)
+            {
+                if (rollPosition.Length == 3)
+                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths);
+                else
+                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths);
+            }
+
             //Saves the result of the above processing.
             resizedImage.SaveAsTIFF(pathAndFileTo);
 
@@ -697,6 +573,33 @@ namespace OAResize
 
             return resultString;
         }
+
+        /// <summary>
+        /// Moves the register marks a certain amount up or down the image.
+        /// </summary>
+        /// <param name="inputImage">The image whose register marks should be moved.</param>
+        /// <param name="MoveThisWay">Up or down.</param>
+        /// <param name="thisMuchInMM">How far the register marks should be moved in millimeter. </param>
+        /// <returns>An image where the register marks have been moved.</returns>
+        private BarebonesImage MoveRegisterMarks(BarebonesImage inputImage, string MoveThisWay, decimal thisMuchInMM, DirPaths dirPaths)
+        {
+            BarebonesImage leadRegMark = new BarebonesImage();
+            BarebonesImage trailRegMark = new BarebonesImage();
+            BarebonesImage blankRegMark = new BarebonesImage();
+
+            string pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.leadRegMark);
+            leadRegMark.ReadATIFF(pathAndFile);
+
+            pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.trailRegMark);
+            trailRegMark.ReadATIFF(pathAndFile);
+
+            pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.blankRegMark);
+            blankRegMark.ReadATIFF(pathAndFile);
+
+            //Remove the old register marks.
+
+            return inputImage;
+        }
     }
 
     /// <summary>
@@ -707,7 +610,6 @@ namespace OAResize
         static void Main()
         {
             #region Instantiation of classes, structs and stuff.
-            LoadConfig loadConfig = new LoadConfig();
             Log Logg = new Log();
             ReadConfig readConfig = new ReadConfig();
             DirPaths dirPaths = new DirPaths(readConfig);
@@ -715,12 +617,16 @@ namespace OAResize
             Phase phase = new Phase();
             ParsingInformation parsingInfo = new ParsingInformation();
             Action<string> logg = (str) => Logg.Text(str, dirPaths);
+            RegisterMarksCoordinates regMarkCoord = new RegisterMarksCoordinates();
             #endregion
 
             #region Load a bunch of parameters from the config file.
+            //Load registermark coordinates from the config file.
+            regMarkCoord.lead = new Tuple<int, int>(readConfig.ReadNumber("leadRegMarkX"), readConfig.ReadNumber("leadRegMarkY"));
+            regMarkCoord.trail = new Tuple<int, int>(readConfig.ReadNumber("trailRegMarkX"),readConfig.ReadNumber("trailRegMarkY"));
 
             //Load the sleepTime from the config file.
-            int sleepTime = loadConfig.ReadNumber("sleepTime").First();
+            int sleepTime = readConfig.ReadNumber("sleepTime");
 
             //Load parsing information for the files names from the config file.
             parsingInfo.towerStart = readConfig.ReadNumber("parseTowerStart");
@@ -738,6 +644,7 @@ namespace OAResize
             parsingInfo.halfStart = readConfig.ReadNumber("parseHalfStart");
             parsingInfo.halfStart -= 1;
             parsingInfo.halfLength = readConfig.ReadNumber("parseHalfLength");
+            
             #endregion
 
 
@@ -753,7 +660,7 @@ namespace OAResize
                 if (fileToProcess != null)
                 {
 
-                    phase.Process(fileToProcess,parsingInfo, dirPaths, loadConfig);
+                    phase.Process(fileToProcess,parsingInfo, dirPaths);
 
                 }
 
