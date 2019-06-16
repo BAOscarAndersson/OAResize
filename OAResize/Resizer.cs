@@ -127,7 +127,7 @@ namespace OAResize
                         string middleFile = Path.Combine(dirPaths.middle, fileName);
 
                         //Wait a bit before trying to move the file to avoid any IO problems.
-                        System.Threading.Thread.Sleep(100);
+                        System.Threading.Thread.Sleep(200);
                         File.Move(sourceFile, middleFile);
 
                         Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - " + allFilesInDir[0] + " moved to buffer.");
@@ -327,15 +327,14 @@ namespace OAResize
     internal class ReadPressConfigXML
     {
         /// <summary>
-        /// Gets the values for fanOut and rollPosition.
+        /// Gets the values for fanOutX and rollPosition.
         /// </summary>
         /// <param name="Tower">Which tower the plate is in.</param>
-        /// <param name="ElementInTower">"fanOut" or "rollPosition"</param>
+        /// <param name="ElementInTower">"fanOutX" or "rollPosition"</param>
         /// <param name="dirPaths">Where the folders of the programs are located.</param>
         /// <returns>Value of the specified element.</returns>
         internal string GetValue(string Tower, string ElementInTower, DirPaths dirPaths)
         {
-            Console.WriteLine(dirPaths.pressConfig);
             XDocument doc = XDocument.Load(dirPaths.pressConfig);
             IEnumerable<XElement> childList =
                 from x in doc.Root.Elements(Tower).Elements(ElementInTower)
@@ -520,16 +519,28 @@ namespace OAResize
             string half = fileTo.Substring(parsingInfo.halfStart, parsingInfo.halfLength);
 
             string rollPosition = readPressConfigXML.GetValue(tower, "rollPosition", dirPaths);
-            string fanOut = readPressConfigXML.GetValue(tower, "fanOut", dirPaths);
-
-            //Check if the zoneCylinder specified by the file name is one that will be processed.
-            int index = -1; // Processes.FindIndex(zC => zC.Name == fileTo.Substring(parsingInfo.start, parsingInfo.length));
-
-            //If the zoneCylinder in the filename isn't in the Processes list, just return and the file will be outputed as is.
-            if (index == -1)
+            
+            if (!Int32.TryParse(cylinder, out int cylinderInt)) {
+                Console.WriteLine(cylinder + " is not a valid cylinder. Press any key to exit.");
+                Console.ReadKey();
+                Environment.Exit(0);
+            }
+            //Black isn't compensated as it is the reference.
+            if (cylinderInt > 6)
             {
                 Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing of " + fileTo + " complete.");
                 return true;
+            }
+
+            //Get how many mm the image should be reduced with.
+            string colour = CylinderToColour(cylinderInt);
+            string fanOut = readPressConfigXML.GetValue(tower, "fanOut" + colour, dirPaths);
+
+            if (!decimal.TryParse(fanOut, out decimal fanOutDecimal))
+            {
+                Console.WriteLine(fanOut + " is not a valid amount of milimeters. Format may be wrong(. instead of ,). Press any key to exit.");
+                Console.ReadKey();
+                Environment.Exit(0);
             }
 
             string pathAndFileTo = Path.Combine(dirPaths.middle, fileTo);
@@ -540,9 +551,22 @@ namespace OAResize
             int originalWidth = processImage.Width;
             int originalHeight = processImage.Height;
             int originalWidthWithPad = processImage.WidthWithPad;
+            
+            /* The mm's are converted to a a scale-factor.
+             * The calculations are done for 1200dpi for now. 
+             * 1200 Dots per inch = 47.2441 Dots per mm. 
+             * So the number of pixels to reduce the image by, each pixel representing a dot,
+             * is 47.2441 * fanOutDecimal. This is then truncated.
+             * Height size will be multiplied with 1-(1/scale) */
+            decimal resizeFactor = 47.2441m * fanOutDecimal;
+            decimal scale = 1 - (originalHeight - resizeFactor) / originalHeight;
+            scale = 1 / scale;
+            scale = Math.Truncate(scale);
+            int scaleInt = (int)scale;
 
-            //Scales the image to the scale of the blue zone.
-            resizedImage = processImage.DownsizeHeight(Processes[index].Scale);
+            Console.WriteLine(originalHeight);
+
+            resizedImage = processImage.DownsizeHeight(scaleInt);
 
             //Outputs the resized width and height so you easyily can see changes you make to the "Scale" factor in OARconfig.txt
             Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - " + fileTo + " resized to: " + resizedImage.Width + " * " + resizedImage.Height);
@@ -554,21 +578,21 @@ namespace OAResize
 
             /* The image will be padded at different place depending on where in the machine the plate will go, 
              * this is determinied by it's zoneCylinder code wich is added to the file name and specified in OARConfig.txt*/
-            switch (Processes[index].MoveThisWay)
-            {
-                case "up":
-                    //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
-                    break;
-                case "down":
-                    //The stream is inserted into the difference of the two streams so it ends up in the bottom.
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
-                    break;
-                default:
-                    //The default makes the image end up in the middle.
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
-                    break;
-            }
+            //switch (Processes[index].MoveThisWay)
+            //{
+            //    case "up":
+            //        //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
+            //        Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
+            //        break;
+            //    case "down":
+            //        //The stream is inserted into the difference of the two streams so it ends up in the bottom.
+            //        Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
+            //        break;
+            //    default:
+            //        //The default makes the image end up in the middle.
+            //        Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
+            //        break;
+            //}
 
             //The resized have been padded with so it's the size of the original once again. 
             resizedImage.Height = originalHeight;
@@ -597,6 +621,28 @@ namespace OAResize
         internal string Output(Action<string> logg, DirPaths dirPaths, MoveFile moveFile)
         {
             return moveFile.FromDir(dirPaths.middle, logg, dirPaths);
+        }
+
+        /// <summary>
+        /// Converts a cylinder to a colour.
+        /// </summary>
+        /// <param name="Cylinder">The cylinder to be converted to a colour.</param>
+        /// <returns>A CMYK colour.</returns>
+        private string CylinderToColour(int Cylinder)
+        {
+            if (Cylinder == 1 || Cylinder == 2)
+                return "C";
+            else if (Cylinder == 3 || Cylinder == 4)
+                return "M";
+            else if (Cylinder == 5 || Cylinder == 6)
+                return "Y";
+            else
+            {
+                Console.WriteLine(Cylinder + " is not a valid cylinder. Press any key to exit.");
+                Console.ReadKey();
+                Environment.Exit(0);
+                return  "Strange error.";   //Gotta keep compiler happy.
+            }
         }
     }
 
