@@ -515,7 +515,7 @@ namespace OAResize
 
             string tower = fileTo.Substring(parsingInfo.towerStart, parsingInfo.towerLength);
             string cylinder = fileTo.Substring(parsingInfo.cylinderStart, parsingInfo.cylinderLength);
-            string section = fileTo.Substring(parsingInfo.sectionStart, parsingInfo.sectionLength);
+            char section = fileTo.Substring(parsingInfo.sectionStart, parsingInfo.sectionLength)[0];
             string half = fileTo.Substring(parsingInfo.halfStart, parsingInfo.halfLength);
 
             string rollPosition = readPressConfigXML.GetValue(tower, "rollPosition", dirPaths);
@@ -564,35 +564,35 @@ namespace OAResize
             scale = Math.Truncate(scale);
             int scaleInt = (int)scale;
 
-            Console.WriteLine(originalHeight);
-
+            //Image is resized.
             resizedImage = processImage.DownsizeHeight(scaleInt);
-
-            //Outputs the resized width and height so you easyily can see changes you make to the "Scale" factor in OARconfig.txt
-            Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - " + fileTo + " resized to: " + resizedImage.Width + " * " + resizedImage.Height);
-
+            
             /* The resized image size needs to be changed back to the original size
              * so the end up in the correct place on the printing plate.
              * This is done by inserting its bytestream into an empty bytestream of the original size*/
             byte[] tempImageBytestream = new byte[originalHeight * originalWidthWithPad / 8];
 
-            /* The image will be padded at different place depending on where in the machine the plate will go, 
-             * this is determinied by it's zoneCylinder code wich is added to the file name and specified in OARConfig.txt*/
-            //switch (Processes[index].MoveThisWay)
-            //{
-            //    case "up":
-            //        //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
-            //        Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
-            //        break;
-            //    case "down":
-            //        //The stream is inserted into the difference of the two streams so it ends up in the bottom.
-            //        Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
-            //        break;
-            //    default:
-            //        //The default makes the image end up in the middle.
-            //        Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
-            //        break;
-            //}
+            /* The image will be padded at different place depending on where in the machine the plate will go.*/
+            string MoveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
+            
+            switch (MoveThisWay)
+            {
+                case "up":
+                    //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
+                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
+                    break;
+                case "down":
+                    //The stream is inserted into the difference of the two streams so it ends up in the bottom.
+                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
+                    break;
+                case "middle":
+                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
+                    break;
+                default:
+                    //The default makes the image end up in the middle.
+                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
+                    break;
+            }
 
             //The resized have been padded with so it's the size of the original once again. 
             resizedImage.Height = originalHeight;
@@ -643,6 +643,59 @@ namespace OAResize
                 Environment.Exit(0);
                 return  "Strange error.";   //Gotta keep compiler happy.
             }
+        }
+
+        /// <summary>
+        /// Figures out which way an image should be moved. 
+        /// <para>The image is moved so it counter acts the paper expansion, 
+        /// meaning that the image is always moved inward.</para>
+        /// </summary>
+        /// <param name="rollPosition">The positions the roll is present in.</param>
+        /// <param name="section">The section that the image is in.</param>
+        /// <param name="cylinder">The cylinder the image is on.</param>
+        /// <returns>The way which the image should be moved.</returns>
+        private string ComputeWhichWay(string rollPosition, char section, int cylinder)
+        {
+            string resultString;
+
+            if (rollPosition.Length == 1)
+            {
+                return "middle";
+            }
+            else if (rollPosition.Length == 2)
+            {
+                if (section == rollPosition[0])
+                    resultString = "down";
+                else
+                    resultString = "up";
+            }
+            else if (rollPosition.Length == 3)
+            {
+                if (section == rollPosition[0])
+                    resultString = "down";
+                else if (section == rollPosition[2])
+                    resultString = "up";
+                else
+                    return "middle";
+            }
+            else
+            {
+                if (section == rollPosition[0] || section == rollPosition[1])
+                    resultString = "down";
+                else
+                    resultString = "up";
+            }
+
+            //If the image is on a cylinder that's in the back, up and down is flipped.
+            if (cylinder == 2 || cylinder == 4 || cylinder == 6)
+            {
+                if (resultString == "up")
+                    resultString = "down";
+                else
+                    resultString = "up";
+            }
+
+            return resultString;
         }
     }
 
