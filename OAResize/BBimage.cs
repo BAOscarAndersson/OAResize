@@ -635,7 +635,7 @@ namespace BarebonesImageLibrary
         {
 
             /* Loop through all the pixles in the image to be inserted.
-             * Offset it vertically so it ends up in the right position*/
+             * Offset it so it ends up in the right position*/
 
             for (int i = 1; i <= insertImage.Width; i++)
             {

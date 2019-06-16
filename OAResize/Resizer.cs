@@ -373,7 +373,7 @@ namespace OAResize
         /// </summary>
         /// <param name = "fileToProcess" > The filename of the.TIF file to process, path not included.</param>
         /// <returns>True upon completion.</returns>
-        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths)
+        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord)
         {
             BarebonesImage processImage = new BarebonesImage();
             BarebonesImage resizedImage = new BarebonesImage();
@@ -409,6 +409,13 @@ namespace OAResize
                 Console.WriteLine(fanOut + " is not a valid amount of milimeters. Format may be wrong(. instead of ,). Press any key to exit.");
                 Console.ReadKey();
                 Environment.Exit(0);
+            }
+
+            //No compensation so the method just returns.
+            if (fanOutDecimal == 0)
+            {
+                Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing of " + fileTo + " complete.");
+                return true;
             }
 
             string pathAndFileTo = Path.Combine(dirPaths.middle, fileTo);
@@ -474,9 +481,9 @@ namespace OAResize
             if(MoveThisWay != "middle" && rollPosition.Length > 2)
             {
                 if (rollPosition.Length == 3)
-                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths);
+                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths, regMarkCoord);
                 else
-                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths);
+                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths, regMarkCoord);
             }
 
             //Saves the result of the above processing.
@@ -581,23 +588,44 @@ namespace OAResize
         /// <param name="MoveThisWay">Up or down.</param>
         /// <param name="thisMuchInMM">How far the register marks should be moved in millimeter. </param>
         /// <returns>An image where the register marks have been moved.</returns>
-        private BarebonesImage MoveRegisterMarks(BarebonesImage inputImage, string MoveThisWay, decimal thisMuchInMM, DirPaths dirPaths)
+        private BarebonesImage MoveRegisterMarks(BarebonesImage inputImage, string moveThisWay, decimal thisMuchInMM, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord)
         {
             BarebonesImage leadRegMark = new BarebonesImage();
             BarebonesImage trailRegMark = new BarebonesImage();
             BarebonesImage blankRegMark = new BarebonesImage();
 
             string pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.leadRegMark);
-            leadRegMark.ReadATIFF(pathAndFile);
+            leadRegMark = leadRegMark.ReadATIFF(pathAndFile);
 
             pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.trailRegMark);
-            trailRegMark.ReadATIFF(pathAndFile);
+            trailRegMark = trailRegMark.ReadATIFF(pathAndFile);
 
             pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.blankRegMark);
-            blankRegMark.ReadATIFF(pathAndFile);
+            blankRegMark = blankRegMark.ReadATIFF(pathAndFile);
 
             //Remove the old register marks.
+            inputImage.Insert(blankRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2);
+            inputImage.Insert(blankRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2);
 
+            //Calculate the new coordinates.
+            decimal thisMuchInPixels = 47.2441m * thisMuchInMM;
+            thisMuchInPixels = Math.Truncate(thisMuchInPixels);
+            int thisMuchInPixelsInt = (int)thisMuchInPixels;
+
+            //The register mark is moved the opposite way of the image as this will move the image the correct direction.
+            if (moveThisWay == "up")
+            {
+                inputImage.Insert(leadRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2 + thisMuchInPixelsInt);
+                inputImage.Insert(trailRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2 + thisMuchInPixelsInt);
+            }
+            else
+            {
+                inputImage.Insert(leadRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2 - thisMuchInPixelsInt);
+                inputImage.Insert(trailRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2 - thisMuchInPixelsInt);
+            }
+
+            
+            
             return inputImage;
         }
     }
@@ -660,7 +688,7 @@ namespace OAResize
                 if (fileToProcess != null)
                 {
 
-                    phase.Process(fileToProcess,parsingInfo, dirPaths);
+                    phase.Process(fileToProcess,parsingInfo, dirPaths, regMarkCoord);
 
                 }
 
