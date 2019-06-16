@@ -5,6 +5,9 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using System.Diagnostics;
+using System.Configuration;
+using System.Xml;
+using System.Xml.Linq;
 using BitMiracle.LibTiff.Classic;
 using BarebonesImageLibrary;
 
@@ -27,25 +30,29 @@ namespace OAResize
         //Folder for logging.
         internal string Log;
 
-        /* The program uses small 1bpp .TIFs that are written on the larger, 
+        /* The program uses small 1bpp .TIFs that are written onto the image being processed, 
          * these images are saved in this folder.*/
         internal string regMarks;
 
+        /* File that contains the information about how to process the images,
+         * which is determined by how the situation looks in the press.*/
+        internal string pressConfig;
+
         //Constructor sets the paths to those from the config file.
-        internal DirPaths(LoadConfig loadConfig)
+        internal DirPaths(ReadConfig readConfig)
         {
-            
-            source = loadConfig.ReadString("source").First();
-            middle = loadConfig.ReadString("middle").First();
-            target = loadConfig.ReadString("target").First();
+            source = readConfig.ReadString("source");
+            middle = readConfig.ReadString("middle");
+            target = readConfig.ReadString("target");
 
-            
-            Log = loadConfig.ReadString("Log").First();
+            Log = readConfig.ReadString("Log");
 
-            
-            regMarks = loadConfig.ReadString("regMarks").First();
+            regMarks = readConfig.ReadString("regMarks");
+
+            pressConfig = System.AppDomain.CurrentDomain.BaseDirectory;
+            pressConfig = Path.Combine(pressConfig, readConfig.ReadString("pressConfig"));
         }
-        
+
         /// <summary>
         /// Checks that the paths exist and returns true if they do.
         /// <para>Otherwise writes an error to log and returns false.</para> 
@@ -73,7 +80,7 @@ namespace OAResize
             return true;
         }
     }
-    
+
     /// <summary>
     /// Moves files from the source to the middle 
     /// and from the middle to the target.
@@ -91,6 +98,7 @@ namespace OAResize
         {
             //Moves any buffered file to the target so its journey may continue.
             string[] allFilesInDir = Directory.GetFiles(folderPath, "*.TIF");
+
             if (allFilesInDir.Length > 1)
             {
                 logg("Warning - " + DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - More than one .TIF present in " + folderPath);
@@ -159,7 +167,7 @@ namespace OAResize
             return null;
         }
     }
-    
+
     /// <summary>
     /// The program logs errors in text files that are unique per day.
     /// </summary>
@@ -175,10 +183,10 @@ namespace OAResize
         internal bool Text(string textToLog, DirPaths dirPaths)
         {
             string logFile;
-            
+
             logFile = Path.Combine(dirPaths.Log, DateTime.Now.ToString("yyyyMMdd"));
             logFile = string.Concat(logFile, @"_OARlog.txt");
-            
+
             //Checks if there exists a file for todays date, otherwise it creats it.
             if (File.Exists(logFile))
             {
@@ -203,7 +211,7 @@ namespace OAResize
             return true;
         }
     }
-    
+
     /// <summary>
     /// Many of the variables in the program can be modified using a configure file called OARConfig.txt.
     /// This class handles the reading of this configure file.
@@ -252,7 +260,7 @@ namespace OAResize
             return "ERRORS abound, this one shouldn't have happend at all. The program should have quit at the line above.";
         }
 
-       /// <summary>
+        /// <summary>
         /// Called to read a number variable from the config file,
         /// such as a time, coordinates, scaling factors and parsing information.
         /// </summary>
@@ -313,31 +321,92 @@ namespace OAResize
     }
 
     /// <summary>
+    /// Reads the XML config file, PressConfig.xml, which contains values specific to the press. 
+    /// Such as fanout per tower and how much the plate-locks are offset.
+    /// </summary>
+    internal class ReadPressConfigXML
+    {
+        /// <summary>
+        /// Gets the values for fanOut and rollPosition.
+        /// </summary>
+        /// <param name="Tower">Which tower the plate is in.</param>
+        /// <param name="ElementInTower">"fanOut" or "rollPosition"</param>
+        /// <param name="dirPaths">Where the folders of the programs are located.</param>
+        /// <returns>Value of the specified element.</returns>
+        internal string GetValue(string Tower, string ElementInTower, DirPaths dirPaths)
+        {
+            Console.WriteLine(dirPaths.pressConfig);
+            XDocument doc = XDocument.Load(dirPaths.pressConfig);
+            IEnumerable<XElement> childList =
+                from x in doc.Root.Elements(Tower).Elements(ElementInTower)
+                select x;
+
+            return childList.First().FirstAttribute.Value;
+        }
+
+    }
+
+    /// <summary>
+    /// Many of the variables in the program can be modified using a configure file called OAResize.exe.config.
+    /// This class handles the reading of this configure file.
+    /// </summary>
+    internal class ReadConfig
+    {
+        /// <summary>
+        /// Reads a string from OAResize.exe.config.
+        /// </summary>
+        /// <param name="key">The key of the variable, usually same as the name of the variable.</param>
+        /// <returns>The value that the variable should have.</returns>
+        internal string ReadString(string key)
+        {
+            //The path where the Config file is located
+            string pathFile = System.AppDomain.CurrentDomain.BaseDirectory;
+            pathFile = string.Concat(pathFile, "OAResize.exe.config");
+
+            //The config file must exist if it doesn't the program wont work.
+            if (!File.Exists(pathFile))
+            {
+                Console.WriteLine(pathFile + "OAResize.exe.config file does not exist. Press any key to exit.");
+                Console.ReadKey();
+                Environment.Exit(0);
+            }
+
+            var appSettings = ConfigurationManager.AppSettings;
+            return appSettings[key];
+        }
+
+        /// <summary>
+        /// Reads a number from OAResize.exe.config.
+        /// </summary>
+        /// <param name="key">The key of the variable, usually same as the name of the variable.</param>
+        /// <returns>The value that the variable should have.</returns>
+        internal ushort ReadNumber(string key)
+        {
+            string readValueAsString = this.ReadString(key);
+
+            if (ushort.TryParse(readValueAsString, out ushort tempInt))
+            {
+                return tempInt;
+            }
+            else
+            {
+                Console.WriteLine(key + " could not be parsed. Press any key to exit.");
+                Console.ReadKey();
+                Environment.Exit(0);
+            }
+
+            return 0; //Should not happen.
+        }
+    }
+
+    /// <summary>
     /// The way a file will be processed is determined by this class.
     /// </summary>
     internal class ZoneCylinderProcess
     {
-        /* name is the name of the zoneCylinders, specified in OARconfig.txt under "zoneCylinders".
-         * scale is how much the images with "name" in their file name will be shrunk.
-         * moveThisWay, the way images with "name" in their file name will be moved.*/
-        private string name;
-        private int scale;
-        private string moveThisWay;
-
-        #region gets the aboves.
-        public int Scale
-        {
-            get => scale;
-        }
-        public string MoveThisWay
-        {
-            get => moveThisWay;
-        }
-        public string Name
-        {
-            get => name;
-        }
-        #endregion
+        public int Scale { get; }
+        public string MoveThisWay { get; }
+        public string Name { get; }
 
         /// <summary>
         /// A class of this type is created for a zoneCylinder which is the input which becomes the name.
@@ -348,12 +417,12 @@ namespace OAResize
         /// <param name="dirPaths">Where the folders of the programs are located.</param>
         internal ZoneCylinderProcess(string zoneCylinder, LoadConfig loadConfig, DirPaths dirPaths)
         {
-            name = zoneCylinder;
-            List<string> parametersOfProcess= loadConfig.ReadString(zoneCylinder);
-            
+            Name = zoneCylinder;
+            List<string> parametersOfProcess = loadConfig.ReadString(zoneCylinder);
+
             if (Int32.TryParse(parametersOfProcess.First(), out int tempInt))
             {
-                scale = tempInt;
+                Scale = tempInt;
             }
             else
             {
@@ -362,9 +431,9 @@ namespace OAResize
                 Environment.Exit(0);
             }
             parametersOfProcess.RemoveAt(0);
-            moveThisWay = parametersOfProcess.First();
+            MoveThisWay = parametersOfProcess.First();
         }
-        
+
     }
 
     /// <summary>
@@ -376,10 +445,16 @@ namespace OAResize
     /// so that it will work with C# where indexes start at 0)
     /// "length" is the number of characters that will be parsed.
     /// </summary>
-    internal struct ZoneCylinderParsingInformation
+    internal struct ParsingInformation
     {
-        internal int start;
-        internal int length;
+        internal ushort towerStart;
+        internal ushort towerLength;
+        internal ushort cylinderStart;
+        internal ushort cylinderLength;
+        internal ushort sectionStart;
+        internal ushort sectionLength;
+        internal ushort halfStart;
+        internal ushort halfLength;
     }
 
     /// <summary>
@@ -387,8 +462,6 @@ namespace OAResize
     /// </summary>
     internal class Phase
     {
-        private readonly List<string> fileBuffer;
-
         /// <summary>
         /// Does input things and validates the paths.
         /// </summary>
@@ -424,20 +497,7 @@ namespace OAResize
                 Console.WriteLine("Validated");
             #endregion
 
-            if (fileBuffer.Count > 0 && fileBuffer.Count < 3)
-            {
-                fileBuffer.Add(moveFile.FromDir(dirPaths.source, logg, dirPaths));
-                return null;
-            }
-            else if (fileBuffer.Count > 0 && fileBuffer.Count == 3)
-            {
-                string tempReturn = fileBuffer.First();
-                fileBuffer.RemoveAt(0);
-                return tempReturn;
-            }
-
-
-                return moveFile.FromDir(dirPaths.source, logg, dirPaths);
+            return moveFile.FromDir(dirPaths.source, logg, dirPaths);
         }
 
         /// <summary>
@@ -446,23 +506,32 @@ namespace OAResize
         /// </summary>
         /// <param name = "fileToProcess" > The filename of the.TIF file to process, path not included.</param>
         /// <returns>True upon completion.</returns>
-        internal bool Process(string fileTo, List<ZoneCylinderProcess> Processes, ZoneCylinderParsingInformation parsingInfo, DirPaths dirPaths, LoadConfig loadConfig)
+        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths, LoadConfig loadConfig)
         {
             BarebonesImage processImage = new BarebonesImage();
             BarebonesImage resizedImage = new BarebonesImage();
+            ReadPressConfigXML readPressConfigXML = new ReadPressConfigXML();
 
             Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing " + fileTo);
 
+            string tower = fileTo.Substring(parsingInfo.towerStart, parsingInfo.towerLength);
+            string cylinder = fileTo.Substring(parsingInfo.cylinderStart, parsingInfo.cylinderLength);
+            string section = fileTo.Substring(parsingInfo.sectionStart, parsingInfo.sectionLength);
+            string half = fileTo.Substring(parsingInfo.halfStart, parsingInfo.halfLength);
+
+            string rollPosition = readPressConfigXML.GetValue(tower, "rollPosition", dirPaths);
+            string fanOut = readPressConfigXML.GetValue(tower, "fanOut", dirPaths);
+
             //Check if the zoneCylinder specified by the file name is one that will be processed.
-            int index = Processes.FindIndex(zC => zC.Name == fileTo.Substring(parsingInfo.start, parsingInfo.length));
-            
+            int index = -1; // Processes.FindIndex(zC => zC.Name == fileTo.Substring(parsingInfo.start, parsingInfo.length));
+
             //If the zoneCylinder in the filename isn't in the Processes list, just return and the file will be outputed as is.
             if (index == -1)
             {
                 Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing of " + fileTo + " complete.");
                 return true;
             }
-            
+
             string pathAndFileTo = Path.Combine(dirPaths.middle, fileTo);
 
             //Load the image that was moved from the source folder.
@@ -471,7 +540,7 @@ namespace OAResize
             int originalWidth = processImage.Width;
             int originalHeight = processImage.Height;
             int originalWidthWithPad = processImage.WidthWithPad;
-            
+
             //Scales the image to the scale of the blue zone.
             resizedImage = processImage.DownsizeHeight(Processes[index].Scale);
 
@@ -527,7 +596,7 @@ namespace OAResize
         /// <returns>The name of the file if a file was moved, null otherwise.</returns>
         internal string Output(Action<string> logg, DirPaths dirPaths, MoveFile moveFile)
         {
-           return moveFile.FromDir(dirPaths.middle, logg, dirPaths);
+            return moveFile.FromDir(dirPaths.middle, logg, dirPaths);
         }
     }
 
@@ -541,33 +610,38 @@ namespace OAResize
             #region Instantiation of classes, structs and stuff.
             LoadConfig loadConfig = new LoadConfig();
             Log Logg = new Log();
-            DirPaths dirPaths = new DirPaths(loadConfig);
+            ReadConfig readConfig = new ReadConfig();
+            DirPaths dirPaths = new DirPaths(readConfig);
             MoveFile fileMove = new MoveFile();
             Phase phase = new Phase();
-            ZoneCylinderParsingInformation parsingInfo = new ZoneCylinderParsingInformation();
+            ParsingInformation parsingInfo = new ParsingInformation();
             Action<string> logg = (str) => Logg.Text(str, dirPaths);
             #endregion
 
             #region Load a bunch of parameters from the config file.
 
-            //Files with file names with the entries of this lists in them will be processed. 
-            List<string> zoneCylinders = loadConfig.ReadString("zoneCylinders");
-            
-            //Different zoneCylinders will be processed in different ways as specified in the config file.
-            List<ZoneCylinderProcess> zoneCylinderProcesses = new List<ZoneCylinderProcess>();
-            
-            foreach (string aZoneCylinder in zoneCylinders){
-                zoneCylinderProcesses.Add(new ZoneCylinderProcess(aZoneCylinder, loadConfig, dirPaths));
-            }
-
             //Load the sleepTime from the config file.
             int sleepTime = loadConfig.ReadNumber("sleepTime").First();
 
             //Load parsing information for the files names from the config file.
-            parsingInfo.start = loadConfig.ReadNumber("zoneCylinderStart").First();
-            parsingInfo.start -= 1;                                                         //C# starts to count at zero.
-            parsingInfo.length = loadConfig.ReadNumber("zoneCylinderLength").First();
+            parsingInfo.towerStart = readConfig.ReadNumber("parseTowerStart");
+            parsingInfo.towerStart -= 1;                                                         //C# starts to count at zero.
+            parsingInfo.towerLength = readConfig.ReadNumber("parseTowerLength");
+
+            parsingInfo.cylinderStart = readConfig.ReadNumber("parseCylinderStart");
+            parsingInfo.cylinderStart -= 1;
+            parsingInfo.cylinderLength = readConfig.ReadNumber("parseCylinderLength");
+
+            parsingInfo.sectionStart = readConfig.ReadNumber("parseSectionStart");
+            parsingInfo.sectionStart -= 1;
+            parsingInfo.sectionLength = readConfig.ReadNumber("parseSectionLength");
+
+            parsingInfo.halfStart = readConfig.ReadNumber("parseHalfStart");
+            parsingInfo.halfStart -= 1;
+            parsingInfo.halfLength = readConfig.ReadNumber("parseHalfLength");
             #endregion
+
+
 
             //Forever loop for now. Main loop of the program.
             string toExitOrNot = @"Never Exit";
@@ -580,8 +654,8 @@ namespace OAResize
                 if (fileToProcess != null)
                 {
 
-                    phase.Process(fileToProcess, zoneCylinderProcesses, parsingInfo, dirPaths, loadConfig);
-                    
+                    phase.Process(fileToProcess,parsingInfo, dirPaths, loadConfig);
+
                 }
 
                 //Any file in the middle should have by this time undergone processing and so is outputed.
