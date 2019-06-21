@@ -9,6 +9,8 @@ using BitMiracle.LibTiff.Classic;
 using System.Drawing;
 using System.Drawing.Imaging;
 
+
+
 namespace BarebonesImageLibrary
 {
     /// <summary>
@@ -18,7 +20,7 @@ namespace BarebonesImageLibrary
     public class BarebonesImage
     {
         //A few things that makes up a barebones image.
-        internal int Height{ get; set; }
+        internal int Height { get; set; }
         internal int Width { get; set; }
         internal int WidthWithPad { get; set; }
 
@@ -34,23 +36,15 @@ namespace BarebonesImageLibrary
         {
             bool twoBool = new bool();
 
-            //if one of the coordinates are outside of the image return false.
-            if (x >= Width || y >= Height || x <= 0 || y <= 0)
-            {
-
-                return false;
-
-            }
-
             //Change the indexes to the once used in C#.
             x--;
             y--;
 
             twoBool = GetBit(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8);
-            
+
             return twoBool;
         }
-        
+
         /// <summary>
         /// Set the value of a pixel in the image.
         /// </summary>
@@ -60,12 +54,6 @@ namespace BarebonesImageLibrary
         /// <returns>True if successful.</returns>
         internal bool SetPixel(int x, int y, Boolean value)
         {
-            //if one of the coordinates are outside of the image return false (failure to set.)
-            if (x >= Width || y >= Height || x <= 0 || y <= 0)
-            {
-                return false;
-            }
-
             //Change the indexes to the once used in C#.
             x--;
             y--;
@@ -76,7 +64,7 @@ namespace BarebonesImageLibrary
 
             return true;
         }
-        
+
         /// <summary>
         /// Gets a specific bit from a byte.
         /// </summary>
@@ -111,7 +99,7 @@ namespace BarebonesImageLibrary
             //Overrides the error handler so that it won't spit out a bunch of warnings.
             BBErrorHandler bbErrorHandler = new BBErrorHandler();
             Tiff.SetErrorHandler(bbErrorHandler);
-            
+
             Tiff inputImage = Tiff.Open(fileToRead, "r");
             BarebonesImage bbImage = new BarebonesImage
             {
@@ -155,7 +143,7 @@ namespace BarebonesImageLibrary
             //    throw new ArgumentException("yres must be 1200");
 
             #endregion
-            
+
             //Images are padded with zeros so the images consist of whole bytes.
             bbImage.WidthWithPad = bbImage.Width + bbImage.CalculatePad(bbImage.Width);
 
@@ -177,10 +165,18 @@ namespace BarebonesImageLibrary
 
                 imageOffset += result;
             }
-            
+
             inputImage.Close();
-            
+
             return bbImage;
+        }
+
+        public Task<BarebonesImage> ReadATIFFAsync(string fileToRead)
+        {
+            return Task.Run(() =>
+            {
+                return ReadATIFF(fileToRead);
+            });
         }
 
         /// <summary>
@@ -199,7 +195,7 @@ namespace BarebonesImageLibrary
                     Console.Error.WriteLine("Could not open" + pathAndFilename + " for writing");
                     return false;
                 }
-                
+
                 #region Sets a bunch of tags to standard values very boring.
                 image.SetField(TiffTag.BITSPERSAMPLE, 1);
                 image.SetField(TiffTag.SAMPLESPERPIXEL, 1);
@@ -256,7 +252,7 @@ namespace BarebonesImageLibrary
 
             //Initilize the byte array for the merged image.
             ImageByteStream = new byte[WidthWithPad / 8 * Height];
-            
+
             // The image is offset vertically so it ends up in the middle.
             int verticalOffset = (Height - Left.Height) / 2;
             this.Insert(Left, verticalOffset, 0);
@@ -370,7 +366,7 @@ namespace BarebonesImageLibrary
         /// <returns>Code 39 charcters as a string of W,w,B and b's.</returns>
         private string GetCode39(char charToBarcode)
         {
-            
+
             switch (charToBarcode)
             {
                 //The letters
@@ -542,7 +538,7 @@ namespace BarebonesImageLibrary
 
             // Unlock the bits.
             convertedImage.UnlockBits(bmpData);
-            
+
             return convertedImage;
         }
 
@@ -578,7 +574,7 @@ namespace BarebonesImageLibrary
             return true;
 
         }
-        
+
         /// <summary>
         /// Makes the BBImage.height smaller by a scale factor.
         /// </summary>
@@ -591,7 +587,7 @@ namespace BarebonesImageLibrary
 
 
             BarebonesImage smallerImage = new BarebonesImage();
-            
+
             smallerImage.Width = this.Width;
             smallerImage.Height = Convert.ToInt32(Math.Truncate((double)this.Height * ((double)1 - ((double)1 / (double)scale))));
             smallerImage.WidthWithPad = smallerImage.Width + CalculatePad(smallerImage.Width);
@@ -620,10 +616,10 @@ namespace BarebonesImageLibrary
                     y += 1;
                 }
             }
-            
+
             return smallerImage;
         }
-        
+
         /// <summary>
         /// Inserts an BBImage into this BBImage.
         /// </summary>
@@ -635,7 +631,7 @@ namespace BarebonesImageLibrary
         {
 
             /* Loop through all the pixles in the image to be inserted.
-             * Offset it so it ends up in the right position*/
+             * Offset it vertically so it ends up in the right position*/
 
             for (int i = 1; i <= insertImage.Width; i++)
             {
@@ -648,6 +644,33 @@ namespace BarebonesImageLibrary
             }
 
             return true;
+        }
+
+        public ushort GetColourOfArea(int x, int y)
+        {
+            ushort resultColour = 0;
+
+            if (GetPixel(x - 1, y - 1))
+                resultColour += 1;
+            if (GetPixel(x, y - 1))
+                resultColour += 1;
+            if (GetPixel(x - 1, y))
+                resultColour += 1;
+            if (GetPixel(x - 1, y + 1))
+                resultColour += 1;
+            if (GetPixel(x, y))
+                resultColour += 1;
+            if (GetPixel(x + 1, y - 1))
+                resultColour += 1;
+            if (GetPixel(x + 1, y))
+                resultColour += 1;
+            if (GetPixel(x, y + 1))
+                resultColour += 1;
+            if (GetPixel(x + 1, y + 1))
+                resultColour += 1;
+
+            return resultColour;
+
         }
     }
 
@@ -664,12 +687,14 @@ namespace BarebonesImageLibrary
         }
     }
 
+
     /// <summary>
     /// A CMYKbbImage consists of four BareboneImages, one for each of colours in a CMYK set.
     /// <para>It also contains a method to convert a CMYKbbImage to a colourized BPM image.</para>
     /// </summary>
     public class CMYKbbImage : BarebonesImage
     {
+
         public BarebonesImage cyan;
         public BarebonesImage magenta;
         public BarebonesImage yellow;
@@ -685,71 +710,76 @@ namespace BarebonesImageLibrary
         }
 
         /// <summary>
-        /// Converts the four black and white BarebonesImages to a colourized BMP image.
+        /// Takes a CMYKbbImage and turns it into a color BMP.
         /// </summary>
-        /// <param name="scale">The scale factor that the barebones will be scaled to.</param>
-        /// <returns>a CMYKbbImage with a composedImage.</returns>
-        public CMYKbbImage BBImageToBitmap(int outWidth, int outHeight)
+        /// <param name="outWidth">Size of image to make.</param>
+        /// <param name="outHeight">Size of image to make.</param>
+        /// <returns>A CMYKbbImage which contains a BMP composed of the CMYKbbImage's BBImages..</returns>
+        public CMYKbbImage BBImageToBitmap(int outWidth, int outHeight, IProgress<int> progress)
         {
-            //Instanciate the image that will be returned and an graphic object that will do some manipulations of the image.
-            this.composedImage = new Bitmap(outWidth, outHeight);
-            Graphics graph = Graphics.FromImage(composedImage);
+            //Instanciate the image that will be returned.
+            this.composedImage = new Bitmap(outWidth / 3, outHeight / 3, PixelFormat.Format24bppRgb);
 
-            #region The primary colours which can all be derived from the CMYK colours.
-            Color blackC = Color.FromName("Black");
-            Color blueC = Color.FromName("Blue");
-            Color cyanC = Color.FromName("Cyan");
-            Color greenC = Color.FromName("Green");
-            Color magentaC = Color.FromName("Magenta");
-            Color redC = Color.FromName("Red");
-            Color whiteC = Color.FromName("White");
-            Color yellowC = Color.FromName("Yellow");
-            #endregion
+            // Lock the bitmap's bits.  
+            Rectangle rect = new Rectangle(0, 0, composedImage.Width, composedImage.Height);
+            BitmapData bmpData = composedImage.LockBits(rect, ImageLockMode.ReadWrite, composedImage.PixelFormat);
 
-            /*Loop through all the pixels of the output and find what colours there are present in the CMYK images,
-             since that will determine what colours of the output will be.*/
-            for (int i = 0; i < outHeight; i++)
+            // Get the address of the first line.
+            IntPtr ptr = bmpData.Scan0;
+
+            // Declare an array to hold the bytes of the bitmap.
+            int bytes = Math.Abs(bmpData.Stride) * composedImage.Height;
+            byte[] rgbValues = new byte[bytes];
+
+            // Copy the RGB values into the array.
+            System.Runtime.InteropServices.Marshal.Copy(ptr, rgbValues, 0, bytes);
+
+            // Compute the black value for each pixel in the composed image from 3*3 pixels in the K image.  
+            for (int i = 1; i < composedImage.Width - 1; i++)
             {
-
-                for (int j = 0; j < outWidth; j++)
+                for (int j = 1; j < composedImage.Height - 1; j++)
                 {
-                    /*If the black image have an active pixel the other images need not be read at all 
-                     since you can not get a colour darker than black.*/
-                    if (black.GetPixel(i + 1, j + 1))
-                        this.composedImage.SetPixel(i, j, blackC);
-                    else
-                    {
-                        bool cI = cyan.GetPixel(i + 1, j + 1);
-                        bool mI = magenta.GetPixel(i + 1, j + 1);
-                        bool yI = yellow.GetPixel(i + 1, j + 1);
+                    ushort antiRed = cyan.GetColourOfArea(i * 3, j * 3);
+                    ushort antiGreen = magenta.GetColourOfArea(i * 3, j * 3);
+                    ushort antiBlue = yellow.GetColourOfArea(i * 3, j * 3);
+                    ushort justBlack = black.GetColourOfArea(i * 3, j * 3);
 
-                        //Choose the primary colour based on which colours(ink) are present in the CMY images.
-                        if (cI && mI && yI)
-                            this.composedImage.SetPixel(i, j, blackC);         //All the inks makes black.
-                        else if (!cI && !mI && !yI)
-                            this.composedImage.SetPixel(i, j, whiteC);         //No ink result in substrate colour(paper) which is usually white.
-                        else if (cI && !mI && !yI)
-                            this.composedImage.SetPixel(i, j, cyanC);
-                        else if (!cI && mI && !yI)
-                            this.composedImage.SetPixel(i, j, magentaC);
-                        else if (!cI && !mI && yI)
-                            this.composedImage.SetPixel(i, j, yellowC);
-                        else if (!cI && mI && yI)
-                            this.composedImage.SetPixel(i, j, redC);           //Magenta and yellow ink makes a red colour.
-                        else if (cI && !mI && yI)
-                            this.composedImage.SetPixel(i, j, greenC);         //Cyan and yellow make a green colour.
-                        else if (cI && mI && !yI)
-                            this.composedImage.SetPixel(i, j, blueC);          //Cyan and magenta make a blue colour.
-                        
-                    }
+                    rgbValues[j * bmpData.Stride + i * 3 + 2] = (byte)(252 - (antiRed * 12 + justBlack * 16));
+                    rgbValues[j * bmpData.Stride + i * 3 + 1] = (byte)(252 - (antiGreen * 12 + justBlack * 16)); ;
+                    rgbValues[j * bmpData.Stride + i * 3 + 0] = (byte)(252 - (antiBlue * 12 + justBlack * 16)); ;
+                }
+
+                //Reports progress because this method is used in an Async method.
+                if (progress != null)
+                {
+                    progress.Report((i * 1000) / composedImage.Width);
                 }
             }
 
-            graph.Dispose();
+            // Copy the RGB values back to the bitmap
+            System.Runtime.InteropServices.Marshal.Copy(rgbValues, 0, ptr, bytes);
+
+            // Unlock the bits.
+            composedImage.UnlockBits(bmpData);
 
             return this;
         }
-        
+
+        /// <summary>
+        /// Asynced version of BBImageToBitmap. Takes a CMYKbbImage and turns it into a color BMP.
+        /// </summary>
+        /// <param name="outWidth">Size of image to make.</param>
+        /// <param name="outHeight">Size of image to make.</param>
+        /// <returns>A CMYKbbImage with a composed BMP.</returns>
+        public Task<CMYKbbImage> BBImageToBitmapAsync(int outWidth, int outHeight, IProgress<int> progress)
+        {
+            return Task.Run(() =>
+            {
+                return BBImageToBitmap(outWidth, outHeight, progress);
+            });
+        }
+
+
         /// <summary>
         /// Samples an area of the four BarebonesImages and calculates how many percent of the pixels are black.
         /// </summary>
@@ -762,7 +792,7 @@ namespace BarebonesImageLibrary
 
             CMYKvalues sampleValues = new CMYKvalues();
 
-            //Loops through all the pixels and counts the black ones.
+            //Loops through all the pixels and count the ones.
             for (int i = 0; i < sampleArea; i++)
             {
 
@@ -790,7 +820,8 @@ namespace BarebonesImageLibrary
             return sampleValues;
 
         }
-        
+
+
     }
 
     /// <summary>
@@ -804,4 +835,6 @@ namespace BarebonesImageLibrary
         public double K;
 
     }
+
+
 }
