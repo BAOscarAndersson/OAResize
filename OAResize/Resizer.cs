@@ -387,8 +387,9 @@ namespace OAResize
             string half = fileTo.Substring(parsingInfo.halfStart, parsingInfo.halfLength);
 
             string rollPosition = readPressConfigXML.GetValue(tower, "rollPosition", dirPaths);
-            
-            if (!Int32.TryParse(cylinder, out int cylinderInt)) {
+
+            if (!Int32.TryParse(cylinder, out int cylinderInt))
+            {
                 Console.WriteLine(cylinder + " is not a valid cylinder. Press any key to exit.");
                 Console.ReadKey();
                 Environment.Exit(0);
@@ -426,7 +427,7 @@ namespace OAResize
             int originalWidth = processImage.Width;
             int originalHeight = processImage.Height;
             int originalWidthWithPad = processImage.WidthWithPad;
-            
+
             /* The mm's are converted to a a scale-factor.
              * The calculations are done for 1200dpi for now. 
              * 1200 Dots per inch = 47.2441 Dots per mm. 
@@ -441,7 +442,7 @@ namespace OAResize
 
             //Image is resized.
             resizedImage = processImage.DownsizeHeight(scaleInt);
-            
+
             /* The resized image size needs to be changed back to the original size
              * so the end up in the correct place on the printing plate.
              * This is done by inserting its bytestream into an empty bytestream of the original size*/
@@ -449,7 +450,7 @@ namespace OAResize
 
             /* The image will be padded at different place depending on where in the machine the plate will go.*/
             string MoveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
-            
+
             switch (MoveThisWay)
             {
                 case "up":
@@ -478,7 +479,7 @@ namespace OAResize
             resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
             resizedImage.ImageByteStream = tempImageBytestream;
 
-            if(MoveThisWay != "middle" && rollPosition.Length > 2)
+            if (MoveThisWay != "middle" && rollPosition.Length > 2)
             {
                 if (rollPosition.Length == 3)
                     resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths, regMarkCoord);
@@ -524,7 +525,7 @@ namespace OAResize
                 Console.WriteLine(Cylinder + " is not a valid cylinder. Press any key to exit.");
                 Console.ReadKey();
                 Environment.Exit(0);
-                return  "Strange error.";   //Gotta keep compiler happy.
+                return "Strange error.";   //Gotta keep compiler happy.
             }
         }
 
@@ -624,8 +625,8 @@ namespace OAResize
                 inputImage.Insert(trailRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2 - thisMuchInPixelsInt);
             }
 
-            
-            
+
+
             return inputImage;
         }
     }
@@ -651,7 +652,7 @@ namespace OAResize
             #region Load a bunch of parameters from the config file.
             //Load registermark coordinates from the config file.
             regMarkCoord.lead = new Tuple<int, int>(readConfig.ReadNumber("leadRegMarkX"), readConfig.ReadNumber("leadRegMarkY"));
-            regMarkCoord.trail = new Tuple<int, int>(readConfig.ReadNumber("trailRegMarkX"),readConfig.ReadNumber("trailRegMarkY"));
+            regMarkCoord.trail = new Tuple<int, int>(readConfig.ReadNumber("trailRegMarkX"), readConfig.ReadNumber("trailRegMarkY"));
 
             //Load the sleepTime from the config file.
             int sleepTime = readConfig.ReadNumber("sleepTime");
@@ -672,7 +673,7 @@ namespace OAResize
             parsingInfo.halfStart = readConfig.ReadNumber("parseHalfStart");
             parsingInfo.halfStart -= 1;
             parsingInfo.halfLength = readConfig.ReadNumber("parseHalfLength");
-            
+
             #endregion
 
 
@@ -688,7 +689,7 @@ namespace OAResize
                 if (fileToProcess != null)
                 {
 
-                    phase.Process(fileToProcess,parsingInfo, dirPaths, regMarkCoord);
+                    phase.Process(fileToProcess, parsingInfo, dirPaths, regMarkCoord);
 
                 }
 
