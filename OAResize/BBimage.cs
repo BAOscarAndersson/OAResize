@@ -23,8 +23,7 @@ namespace BarebonesImageLibrary
         internal int Height { get; set; }
         internal int Width { get; set; }
         internal int WidthWithPad { get; set; }
-
-        internal byte[] ImageByteStream { get; set; }
+        internal List<List<byte>> ImageMatrix { get; set; }
 
         /// <summary>
         /// Get the value of a pixel in the image.
@@ -40,7 +39,9 @@ namespace BarebonesImageLibrary
             x--;
             y--;
 
-            twoBool = GetBit(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8);
+            //twoBool = GetBit(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8);
+
+            twoBool = GetBit(ImageMatrix[x / 8][y], 7 - x % 8);
 
             return twoBool;
         }
@@ -60,7 +61,8 @@ namespace BarebonesImageLibrary
 
             /* y*widthWithPad/8+x/8 converts the x and y coordinate to a the pixels byte-position. 
              * 7-x%8 converts a pixels x coordinate to its place within a byte.*/
-            ImageByteStream[y * WidthWithPad / 8 + x / 8] = SetByte(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8, value);
+            //ImageByteStream[y * WidthWithPad / 8 + x / 8] = SetByte(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8, value);
+            ImageMatrix[x / 8][y] = SetByte(ImageMatrix[x / 8][y], 7 - x % 8, value);
 
             return true;
         }
@@ -147,23 +149,33 @@ namespace BarebonesImageLibrary
             //Images are padded with zeros so the images consist of whole bytes.
             bbImage.WidthWithPad = bbImage.Width + bbImage.CalculatePad(bbImage.Width);
 
-            bbImage.ImageByteStream = new byte[bbImage.WidthWithPad / 8 * bbImage.Height];
+            byte[] ImageByteStream = new byte[bbImage.WidthWithPad / 8 * bbImage.Height];
 
             // Read for multiple strips
             int stripSize = inputImage.StripSize();
             int stripMax = inputImage.NumberOfStrips();
-            int imageOffset = 0;
+            //int imageOffset = 0;
 
-            // Goes through all the strips and put them into a single bytestream in the barebonesImage.
+            bbImage.ImageMatrix = new List<List<byte>>();
+
+            // Goes through all the strips and put them into a single ImageMatrix(A list of lists) in the barebonesImage.
             for (int stripCount = 0; stripCount < stripMax; stripCount++)
             {
-                int result = inputImage.ReadEncodedStrip(stripCount, bbImage.ImageByteStream, imageOffset, stripSize);
+                int result = inputImage.ReadEncodedStrip(stripCount, ImageByteStream, 0, stripSize); //imageOffset, stripSize);
                 if (result == -1)
                 {
                     Console.Error.WriteLine("Read error on input strip number {0}", stripCount);
                 }
 
-                imageOffset += result;
+                List<byte> ImageByteListStream = ImageByteStream.ToList();
+
+                for (int i = 0; i < ImageByteListStream.Count; i += bbImage.WidthWithPad/8)
+                {
+                    bbImage.ImageMatrix.Add(ImageByteListStream.GetRange(i, Math.Min(bbImage.WidthWithPad/8, ImageByteListStream.Count - i)));
+                }
+
+
+                //imageOffset += result;
             }
 
             inputImage.Close();
@@ -215,8 +227,22 @@ namespace BarebonesImageLibrary
                 image.SetField(TiffTag.IMAGELENGTH, Height);
                 image.SetField(TiffTag.ROWSPERSTRIP, Height);
 
+                //Construct a ImageByteStream from ImageMatrix
+                byte[] imageByteStream = new byte[WidthWithPad / 8 * Height];
+
+                for (int x = 0; x < WidthWithPad; x++)
+                {
+
+                    for (int y = 0; y < WidthWithPad; y++)
+                    {
+
+                        imageByteStream[x+y] = ImageMatrix[x][y];
+
+                    }
+
+                }
                 // Write the information to the file
-                image.WriteEncodedStrip(0, ImageByteStream, WidthWithPad / 8 * Height);
+                image.WriteEncodedStrip(0, imageByteStream, WidthWithPad / 8 * Height);
 
             }
 
@@ -249,10 +275,7 @@ namespace BarebonesImageLibrary
             }
             else
                 Height = Left.Height;
-
-            //Initilize the byte array for the merged image.
-            ImageByteStream = new byte[WidthWithPad / 8 * Height];
-
+            
             // The image is offset vertically so it ends up in the middle.
             int verticalOffset = (Height - Left.Height) / 2;
             this.Insert(Left, verticalOffset, 0);
@@ -522,102 +545,76 @@ namespace BarebonesImageLibrary
         /// <param name="outWidth">The width of the BBImage.</param>
         /// <param name="outHeight">The height of the BBImage.</param>
         /// <returns>A bitmap.</returns>
-        public Bitmap ToBitmap(int outWidth, int outHeight)
-        {
-            //Instanciate the image that will be returned and an graphic object that will do some manipulations of the image.
-            Bitmap convertedImage = new Bitmap(outWidth, outHeight, PixelFormat.Format1bppIndexed);
-            Rectangle rect = new Rectangle(0, 0, outWidth, outHeight);
+        //public Bitmap ToBitmap(int outWidth, int outHeight)
+        //{
+        //    //Instanciate the image that will be returned and an graphic object that will do some manipulations of the image.
+        //    Bitmap convertedImage = new Bitmap(outWidth, outHeight, PixelFormat.Format1bppIndexed);
+        //    Rectangle rect = new Rectangle(0, 0, outWidth, outHeight);
 
-            BitmapData bmpData = convertedImage.LockBits(rect, ImageLockMode.ReadWrite, convertedImage.PixelFormat);
+        //    BitmapData bmpData = convertedImage.LockBits(rect, ImageLockMode.ReadWrite, convertedImage.PixelFormat);
 
-            // Get the address of the first line.
-            IntPtr ptr = bmpData.Scan0;
+        //    // Get the address of the first line.
+        //    IntPtr ptr = bmpData.Scan0;
 
-            // Copy the array into the bitmap.
-            System.Runtime.InteropServices.Marshal.Copy(this.ImageByteStream, 0, ptr, this.Height * this.WidthWithPad / 8);
+        //    // Copy the array into the bitmap.
+        //    System.Runtime.InteropServices.Marshal.Copy(this.ImageByteStream, 0, ptr, this.Height * this.WidthWithPad / 8);
 
-            // Unlock the bits.
-            convertedImage.UnlockBits(bmpData);
+        //    // Unlock the bits.
+        //    convertedImage.UnlockBits(bmpData);
 
-            return convertedImage;
-        }
+        //    return convertedImage;
+        //}
 
         /// <summary>
         /// Turns a 1bpp bitmap into a Barebones Image. 
         /// </summary>
         /// <param name="inputBitmap">The image to be turned into a BB image.</param>
         /// <returns>true upon completion</returns>
-        public bool BitmapToBBImage(Bitmap inputBitmap)
-        {
-            //New dimensions of the BBImage
-            this.Width = inputBitmap.Width;
-            this.Height = inputBitmap.Height;
+        //public bool BitmapToBBImage(Bitmap inputBitmap)
+        //{
+        //    //New dimensions of the BBImage
+        //    this.Width = inputBitmap.Width;
+        //    this.Height = inputBitmap.Height;
 
-            //Padding for width is recalculated.
-            WidthWithPad = Width;
-            while ((WidthWithPad % 8) != 0)
-            {
-                WidthWithPad++;
-            }
+        //    //Padding for width is recalculated.
+        //    WidthWithPad = Width;
+        //    while ((WidthWithPad % 8) != 0)
+        //    {
+        //        WidthWithPad++;
+        //    }
 
-            Rectangle rect = new Rectangle(0, 0, inputBitmap.Width, inputBitmap.Height);
+        //    Rectangle rect = new Rectangle(0, 0, inputBitmap.Width, inputBitmap.Height);
 
-            BitmapData bmpData = inputBitmap.LockBits(rect, ImageLockMode.ReadWrite, inputBitmap.PixelFormat);
+        //    BitmapData bmpData = inputBitmap.LockBits(rect, ImageLockMode.ReadWrite, inputBitmap.PixelFormat);
 
-            // Get the address of the first line.
-            IntPtr ptr = bmpData.Scan0;
+        //    // Get the address of the first line.
+        //    IntPtr ptr = bmpData.Scan0;
 
-            System.Runtime.InteropServices.Marshal.Copy(ptr, this.ImageByteStream, 0, this.Height * this.WidthWithPad / 8);
+        //    System.Runtime.InteropServices.Marshal.Copy(ptr, this.ImageByteStream, 0, this.Height * this.WidthWithPad / 8);
 
-            inputBitmap.UnlockBits(bmpData);
+        //    inputBitmap.UnlockBits(bmpData);
 
-            return true;
+        //    return true;
 
-        }
+        //}
 
         /// <summary>
         /// Makes the BBImage.height smaller by a scale factor.
         /// </summary>
         /// <param name="scale">Height size will be multiplied with 1-(1/scale).</param>
-        /// <returns>A barebones image that have been made smaller.</returns>
-        public BarebonesImage DownsizeHeight(int scale)
+        public void DownsizeHeight(int scale)
         {
             if (scale == 0)
-                return this;
+                return;
 
+            Height = Convert.ToInt32(Math.Truncate((double)this.Height * ((double)1 - ((double)1 / (double)scale))));
 
-            BarebonesImage smallerImage = new BarebonesImage();
-
-            smallerImage.Width = this.Width;
-            smallerImage.Height = Convert.ToInt32(Math.Truncate((double)this.Height * ((double)1 - ((double)1 / (double)scale))));
-            smallerImage.WidthWithPad = smallerImage.Width + CalculatePad(smallerImage.Width);
-            smallerImage.ImageByteStream = new byte[smallerImage.WidthWithPad / 8 * smallerImage.Height];
-
-
-
-            /* Loop through all the pixles in the bigger image
-             * and insert them into the smaller unless they are
-             * in a position modulo scale in which case they are dropped.*/
-            int x = 1;
-            int y = 1;
-            for (int i = 1; i <= this.Width; i++)
+            for (int y = Height; y >= 0; y--)
             {
-                x += 1;
-                y = 1;
-
-                for (int j = 1; j <= this.Height; j++)
-                {
-
-                    if (j % scale == 0)
-                        continue;
-
-                    smallerImage.SetPixel(x, y, this.GetPixel(i, j));
-
-                    y += 1;
-                }
+                if (y % scale == 0)
+                    ImageMatrix.RemoveAt(y);
             }
 
-            return smallerImage;
         }
 
         /// <summary>

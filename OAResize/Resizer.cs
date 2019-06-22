@@ -386,6 +386,11 @@ namespace OAResize
             char section = fileTo.Substring(parsingInfo.sectionStart, parsingInfo.sectionLength)[0];
             string half = fileTo.Substring(parsingInfo.halfStart, parsingInfo.halfLength);
 
+            Console.WriteLine("Tower: " + tower);
+            Console.WriteLine("Cylinder: " + cylinder);
+            Console.WriteLine("Section: " + section);
+            Console.WriteLine("Half: " + half);
+
             string rollPosition = readPressConfigXML.GetValue(tower, "rollPosition", dirPaths);
 
             if (!Int32.TryParse(cylinder, out int cylinderInt))
@@ -441,7 +446,7 @@ namespace OAResize
             int scaleInt = (int)scale;
 
             //Image is resized.
-            resizedImage = processImage.DownsizeHeight(scaleInt);
+            processImage.DownsizeHeight(scaleInt);
 
             /* The resized image size needs to be changed back to the original size
              * so the end up in the correct place on the printing plate.
@@ -455,18 +460,18 @@ namespace OAResize
             {
                 case "up":
                     //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
+                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
                     break;
                 case "down":
                     //The stream is inserted into the difference of the two streams so it ends up in the bottom.
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
+                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
                     break;
                 case "middle":
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
+                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
                     break;
                 default:
                     //The default makes the image end up in the middle.
-                    Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
+                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
                     break;
             }
 
@@ -476,8 +481,8 @@ namespace OAResize
             resizedImage.WidthWithPad = originalWidthWithPad;
 
             //The padded bytestream is inserted to the resized image.
-            resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
-            resizedImage.ImageByteStream = tempImageBytestream;
+            //resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
+            //resizedImage.ImageByteStream = tempImageBytestream;
 
             if (MoveThisWay != "middle" && rollPosition.Length > 2)
             {
@@ -673,10 +678,8 @@ namespace OAResize
             parsingInfo.halfStart = readConfig.ReadNumber("parseHalfStart");
             parsingInfo.halfStart -= 1;
             parsingInfo.halfLength = readConfig.ReadNumber("parseHalfLength");
-
+            
             #endregion
-
-
 
             //Forever loop for now. Main loop of the program.
             string toExitOrNot = @"Never Exit";
