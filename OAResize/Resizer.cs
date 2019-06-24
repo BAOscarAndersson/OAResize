@@ -376,7 +376,6 @@ namespace OAResize
         internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord)
         {
             BarebonesImage processImage = new BarebonesImage();
-            BarebonesImage resizedImage = new BarebonesImage();
             ReadPressConfigXML readPressConfigXML = new ReadPressConfigXML();
 
             Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing " + fileTo);
@@ -399,6 +398,7 @@ namespace OAResize
                 Console.ReadKey();
                 Environment.Exit(0);
             }
+
             //Black isn't compensated as it is the reference.
             if (cylinderInt > 6)
             {
@@ -428,10 +428,8 @@ namespace OAResize
 
             //Load the image that was moved from the source folder.
             processImage = processImage.ReadATIFF(pathAndFileTo);
-
-            int originalWidth = processImage.Width;
+            
             int originalHeight = processImage.Height;
-            int originalWidthWithPad = processImage.WidthWithPad;
 
             /* The mm's are converted to a a scale-factor.
              * The calculations are done for 1200dpi for now. 
@@ -445,55 +443,55 @@ namespace OAResize
             scale = Math.Truncate(scale);
             int scaleInt = (int)scale;
 
+            //Remove the register marks before it's resized since that's when you know where they are without having to calculate.
+            processImage = RemoveRegisterMarks(processImage, dirPaths, regMarkCoord);
+
             //Image is resized.
             processImage.DownsizeHeight(scaleInt);
 
-            /* The resized image size needs to be changed back to the original size
-             * so the end up in the correct place on the printing plate.
-             * This is done by inserting its bytestream into an empty bytestream of the original size*/
-            byte[] tempImageBytestream = new byte[originalHeight * originalWidthWithPad / 8];
-
-            /* The image will be padded at different place depending on where in the machine the plate will go.*/
+            //The image will be padded at different place depending on where in the machine the plate will go.
             string MoveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
+
+            byte[] zeroByteRow = new byte[processImage.WidthWithPad / 8];
+
+            int sizeDifference = originalHeight - processImage.Height;
 
             switch (MoveThisWay)
             {
                 case "up":
-                    //The resized image byte stream is inserted into the start of the temporary stream, causing it to end up at the top of the bigger picture.
-                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, 0, resizedImage.ImageByteStream.Length);
+                    Console.WriteLine("UP");
+                    for (int i = 0; i < sizeDifference; i++)
+                        processImage.ImageMatrix.Insert(processImage.ImageMatrix.Count, zeroByteRow.ToList());
                     break;
                 case "down":
-                    //The stream is inserted into the difference of the two streams so it ends up in the bottom.
-                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 8, resizedImage.ImageByteStream.Length);
+                    Console.WriteLine("DOWN");
+                    for (int i = 0; i < sizeDifference; i++)
+                        processImage.ImageMatrix.Insert(0, zeroByteRow.ToList());
+                    
                     break;
                 case "middle":
-                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
+                    Console.WriteLine("MIddle");
+                    for (int i = 0; i < sizeDifference / 2; i++)
+                        processImage.ImageMatrix.Insert(0, zeroByteRow.ToList());
+                    for (int i = 0; i < sizeDifference / 2; i++)
+                        processImage.ImageMatrix.Insert(processImage.ImageMatrix.Count, zeroByteRow.ToList());
                     break;
                 default:
-                    //The default makes the image end up in the middle.
-                    //Array.Copy(resizedImage.ImageByteStream, 0, tempImageBytestream, (originalHeight - resizedImage.Height) * originalWidthWithPad / 16, resizedImage.ImageByteStream.Length);
+                    Console.WriteLine("Default");
+                    for (int i = 0; i < sizeDifference / 2; i++)
+                        processImage.ImageMatrix.Insert(0, zeroByteRow.ToList());
+                    for (int i = 0; i < sizeDifference / 2; i++)
+                        processImage.ImageMatrix.Insert(processImage.ImageMatrix.Count, zeroByteRow.ToList());
                     break;
             }
 
-            //The resized have been padded with so it's the size of the original once again. 
-            resizedImage.Height = originalHeight;
-            resizedImage.Width = originalWidth;
-            resizedImage.WidthWithPad = originalWidthWithPad;
+            //Since it's been padded, the image once again has its original height.
+            processImage.Height = originalHeight;
 
-            //The padded bytestream is inserted to the resized image.
-            //resizedImage.ImageByteStream = new byte[resizedImage.Height * resizedImage.WidthWithPad / 8];
-            //resizedImage.ImageByteStream = tempImageBytestream;
-
-            if (MoveThisWay != "middle" && rollPosition.Length > 2)
-            {
-                if (rollPosition.Length == 3)
-                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths, regMarkCoord);
-                else
-                    resizedImage = MoveRegisterMarks(resizedImage, MoveThisWay, fanOutDecimal, dirPaths, regMarkCoord);
-            }
+            processImage = InsertRegisterMarks(processImage, dirPaths, regMarkCoord);
 
             //Saves the result of the above processing.
-            resizedImage.SaveAsTIFF(pathAndFileTo);
+            processImage.SaveAsTIFF(pathAndFileTo);
 
             Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing of " + fileTo + " complete.");
 
@@ -589,16 +587,36 @@ namespace OAResize
 
         /// <summary>
         /// Moves the register marks a certain amount up or down the image.
+        /// </summary>       
+        /// <param name="inputImage">Image whose registermarks should be removed.</param>
+        /// <param name="dirPaths">Paths of the program.</param>
+        /// <param name="regMarkCoord">Coordinates of the register marks.</param>
+        /// <returns>An image where the register marks have been removed.</returns>
+        private BarebonesImage RemoveRegisterMarks(BarebonesImage inputImage, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord)
+        {
+            BarebonesImage blankRegMark = new BarebonesImage();
+
+            string pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.blankRegMark);
+            blankRegMark = blankRegMark.ReadATIFF(pathAndFile);
+
+            //Cover the old register marks with white pixels.
+            inputImage.Insert(blankRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2);
+            inputImage.Insert(blankRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2);
+
+             return inputImage;
+        }
+
+        /// <summary>
+        /// Inserts register marks to their coordinates.
         /// </summary>
-        /// <param name="inputImage">The image whose register marks should be moved.</param>
-        /// <param name="MoveThisWay">Up or down.</param>
-        /// <param name="thisMuchInMM">How far the register marks should be moved in millimeter. </param>
-        /// <returns>An image where the register marks have been moved.</returns>
-        private BarebonesImage MoveRegisterMarks(BarebonesImage inputImage, string moveThisWay, decimal thisMuchInMM, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord)
+        /// <param name="inputImage">Image whose registermarks should be removed.</param>
+        /// <param name="dirPaths">Paths of the program.</param>
+        /// <param name="regMarkCoord">Coordinates of the register marks.</param>
+        /// <returns>An image where the register marks have been inserted into their positions.</returns>
+        private BarebonesImage InsertRegisterMarks(BarebonesImage inputImage, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord)
         {
             BarebonesImage leadRegMark = new BarebonesImage();
             BarebonesImage trailRegMark = new BarebonesImage();
-            BarebonesImage blankRegMark = new BarebonesImage();
 
             string pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.leadRegMark);
             leadRegMark = leadRegMark.ReadATIFF(pathAndFile);
@@ -606,32 +624,10 @@ namespace OAResize
             pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.trailRegMark);
             trailRegMark = trailRegMark.ReadATIFF(pathAndFile);
 
-            pathAndFile = Path.Combine(dirPaths.regMarks, dirPaths.blankRegMark);
-            blankRegMark = blankRegMark.ReadATIFF(pathAndFile);
-
-            //Remove the old register marks.
-            inputImage.Insert(blankRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2);
-            inputImage.Insert(blankRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2);
-
-            //Calculate the new coordinates.
-            decimal thisMuchInPixels = 47.2441m * thisMuchInMM;
-            thisMuchInPixels = Math.Truncate(thisMuchInPixels);
-            int thisMuchInPixelsInt = (int)thisMuchInPixels;
-
-            //The register mark is moved the opposite way of the image as this will move the image the correct direction.
-            if (moveThisWay == "up")
-            {
-                inputImage.Insert(leadRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2 + thisMuchInPixelsInt);
-                inputImage.Insert(trailRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2 + thisMuchInPixelsInt);
-            }
-            else
-            {
-                inputImage.Insert(leadRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2 - thisMuchInPixelsInt);
-                inputImage.Insert(trailRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2 - thisMuchInPixelsInt);
-            }
-
-
-
+            //Insert the register mark.
+            inputImage.Insert(leadRegMark, regMarkCoord.lead.Item1, regMarkCoord.lead.Item2);
+            inputImage.Insert(trailRegMark, regMarkCoord.trail.Item1, regMarkCoord.trail.Item2);
+            
             return inputImage;
         }
     }

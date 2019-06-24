@@ -33,17 +33,7 @@ namespace BarebonesImageLibrary
         /// <returns>Returns what the value of the pixel is.</returns>
         internal bool GetPixel(int x, int y)
         {
-            bool twoBool = new bool();
-
-            //Change the indexes to the once used in C#.
-            x--;
-            y--;
-
-            //twoBool = GetBit(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8);
-
-            twoBool = GetBit(ImageMatrix[x / 8][y], 7 - x % 8);
-
-            return twoBool;
+            return GetBit(ImageMatrix[y][x / 8], 7 - x % 8);
         }
 
         /// <summary>
@@ -55,14 +45,7 @@ namespace BarebonesImageLibrary
         /// <returns>True if successful.</returns>
         internal bool SetPixel(int x, int y, Boolean value)
         {
-            //Change the indexes to the once used in C#.
-            x--;
-            y--;
-
-            /* y*widthWithPad/8+x/8 converts the x and y coordinate to a the pixels byte-position. 
-             * 7-x%8 converts a pixels x coordinate to its place within a byte.*/
-            //ImageByteStream[y * WidthWithPad / 8 + x / 8] = SetByte(ImageByteStream[y * WidthWithPad / 8 + x / 8], 7 - x % 8, value);
-            ImageMatrix[x / 8][y] = SetByte(ImageMatrix[x / 8][y], 7 - x % 8, value);
+            ImageMatrix[y][x / 8] = SetByte(ImageMatrix[y][x / 8], 7 - x % 8, value);
 
             return true;
         }
@@ -75,8 +58,7 @@ namespace BarebonesImageLibrary
         /// <returns>The value of the bit.</returns>
         private bool GetBit(byte b, int index)
         {
-            bool bit = (b & (1 << index)) != 0;
-            return bit;
+            return (b & (1 << index)) != 0;
         }
 
         /// <summary>
@@ -146,7 +128,7 @@ namespace BarebonesImageLibrary
 
             #endregion
 
-            //Images are padded with zeros so the images consist of whole bytes.
+            //Images are padded with zeros so the images consist of whole bytes as per the TIF specification.
             bbImage.WidthWithPad = bbImage.Width + bbImage.CalculatePad(bbImage.Width);
 
             byte[] ImageByteStream = new byte[bbImage.WidthWithPad / 8 * bbImage.Height];
@@ -154,29 +136,30 @@ namespace BarebonesImageLibrary
             // Read for multiple strips
             int stripSize = inputImage.StripSize();
             int stripMax = inputImage.NumberOfStrips();
-            //int imageOffset = 0;
+            int imageOffset = 0;
 
+            //This ImageMatrix is where the data of the image will be stored in the Barebones Image.
             bbImage.ImageMatrix = new List<List<byte>>();
-
-            // Goes through all the strips and put them into a single ImageMatrix(A list of lists) in the barebonesImage.
+            
+            // Goes through all the strips and put them into a single bytestreame.
             for (int stripCount = 0; stripCount < stripMax; stripCount++)
             {
-                int result = inputImage.ReadEncodedStrip(stripCount, ImageByteStream, 0, stripSize); //imageOffset, stripSize);
+                int result = inputImage.ReadEncodedStrip(stripCount, ImageByteStream, imageOffset, stripSize);
                 if (result == -1)
                 {
                     Console.Error.WriteLine("Read error on input strip number {0}", stripCount);
                 }
 
-                List<byte> ImageByteListStream = ImageByteStream.ToList();
-
-                for (int i = 0; i < ImageByteListStream.Count; i += bbImage.WidthWithPad/8)
-                {
-                    bbImage.ImageMatrix.Add(ImageByteListStream.GetRange(i, Math.Min(bbImage.WidthWithPad/8, ImageByteListStream.Count - i)));
-                }
-
-
-                //imageOffset += result;
+                imageOffset += result;
             }
+
+            //Convert the array to a list, chop it up and insert it into the ImageMatrix of the Barebones Image.
+            List<byte> ImageByteList = ImageByteStream.ToList();
+            for (int i = 0; i < ImageByteList.Count; i += bbImage.WidthWithPad/8)
+            {
+                bbImage.ImageMatrix.Add(ImageByteList.GetRange(i, Math.Min(bbImage.WidthWithPad/8, ImageByteList.Count - i)));
+            }
+                
 
             inputImage.Close();
 
@@ -230,20 +213,17 @@ namespace BarebonesImageLibrary
                 //Construct a ImageByteStream from ImageMatrix
                 byte[] imageByteStream = new byte[WidthWithPad / 8 * Height];
 
-                for (int x = 0; x < WidthWithPad; x++)
+                for (int x = 0; x < Height; x++)
                 {
 
-                    for (int y = 0; y < WidthWithPad; y++)
+                    for (int y = 0; y < WidthWithPad / 8; y++)
                     {
-
-                        imageByteStream[x+y] = ImageMatrix[x][y];
-
+                        imageByteStream[x*WidthWithPad/8+y] = ImageMatrix[x][y];
                     }
-
                 }
+
                 // Write the information to the file
                 image.WriteEncodedStrip(0, imageByteStream, WidthWithPad / 8 * Height);
-
             }
 
             return true;
@@ -305,9 +285,9 @@ namespace BarebonesImageLibrary
             graph.DrawString(textToWrite, new Font(new FontFamily("Calibri"), fontSize, FontStyle.Regular), Brushes.Black, 0, 0);
 
             //Goes through all the pixels in the image and transfers them to the barebones image.
-            for (int i = 1; i < textToWrite.Length * fontSize; i++)
+            for (int i = 0; i < textToWrite.Length * fontSize; i++)
             {
-                for (int j = 1; j < fontSize * 2; j++)
+                for (int j = 0; j < fontSize * 2; j++)
                 {
                     //Reads the colour from the bitmap image the text was written to.
                     Color colour = image.GetPixel(i, j);
@@ -607,14 +587,13 @@ namespace BarebonesImageLibrary
             if (scale == 0)
                 return;
 
-            Height = Convert.ToInt32(Math.Truncate((double)this.Height * ((double)1 - ((double)1 / (double)scale))));
-
-            for (int y = Height; y >= 0; y--)
+            for (int y = Height; y > 0; y--)
             {
                 if (y % scale == 0)
-                    ImageMatrix.RemoveAt(y);
+                    ImageMatrix.RemoveAt(y-1);
             }
 
+            Height = Convert.ToInt32(Math.Truncate((double)this.Height * ((double)1 - ((double)1 / (double)scale))));
         }
 
         /// <summary>
@@ -630,13 +609,11 @@ namespace BarebonesImageLibrary
             /* Loop through all the pixles in the image to be inserted.
              * Offset it vertically so it ends up in the right position*/
 
-            for (int i = 1; i <= insertImage.Width; i++)
+            for (int i = 0; i < insertImage.Width; i++)
             {
-                for (int j = 1; j <= insertImage.Height; j++)
+                for (int j = 0; j < insertImage.Height; j++)
                 {
-
                     SetPixel(i + x, j + y, insertImage.GetPixel(i, j));
-
                 }
             }
 
@@ -645,6 +622,9 @@ namespace BarebonesImageLibrary
 
         public ushort GetColourOfArea(int x, int y)
         {
+            x--;
+            y--;
+
             ushort resultColour = 0;
 
             if (GetPixel(x - 1, y - 1))
