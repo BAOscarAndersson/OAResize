@@ -116,16 +116,6 @@ namespace BarebonesImageLibrary
             if (string.Compare(resUnit, @"INCH") != 0)
                 throw new ArgumentException("resUnit must be INCH");
 
-            //Not working for some reason.
-            //string xres = inputImage.GetField(TiffTag.XRESOLUTION)[0].ToString();
-            //if (string.Compare(xres, @"1200") != 0)
-            //    throw new ArgumentException("xres must be 1200");
-
-            //Not working for some reason.
-            //string yres = inputImage.GetField(TiffTag.YRESOLUTION)[0].ToString();
-            //if (string.Compare(yres, @"1200") != 0)
-            //    throw new ArgumentException("yres must be 1200");
-
             #endregion
 
             //Images are padded with zeros so the images consist of whole bytes as per the TIF specification.
@@ -140,7 +130,7 @@ namespace BarebonesImageLibrary
 
             //This ImageMatrix is where the data of the image will be stored in the Barebones Image.
             bbImage.ImageMatrix = new List<List<byte>>();
-            
+
             // Goes through all the strips and put them into a single bytestreame.
             for (int stripCount = 0; stripCount < stripMax; stripCount++)
             {
@@ -155,11 +145,11 @@ namespace BarebonesImageLibrary
 
             //Convert the array to a list, chop it up and insert it into the ImageMatrix of the Barebones Image.
             List<byte> ImageByteList = ImageByteStream.ToList();
-            for (int i = 0; i < ImageByteList.Count; i += bbImage.WidthWithPad/8)
+            for (int i = 0; i < ImageByteList.Count; i += bbImage.WidthWithPad / 8)
             {
-                bbImage.ImageMatrix.Add(ImageByteList.GetRange(i, Math.Min(bbImage.WidthWithPad/8, ImageByteList.Count - i)));
+                bbImage.ImageMatrix.Add(ImageByteList.GetRange(i, Math.Min(bbImage.WidthWithPad / 8, ImageByteList.Count - i)));
             }
-                
+
 
             inputImage.Close();
 
@@ -218,7 +208,7 @@ namespace BarebonesImageLibrary
 
                     for (int y = 0; y < WidthWithPad / 8; y++)
                     {
-                        imageByteStream[x*WidthWithPad/8+y] = ImageMatrix[x][y];
+                        imageByteStream[x * WidthWithPad / 8 + y] = ImageMatrix[x][y];
                     }
                 }
 
@@ -255,7 +245,7 @@ namespace BarebonesImageLibrary
             }
             else
                 Height = Left.Height;
-            
+
             // The image is offset vertically so it ends up in the middle.
             int verticalOffset = (Height - Left.Height) / 2;
             this.Insert(Left, verticalOffset, 0);
@@ -557,11 +547,7 @@ namespace BarebonesImageLibrary
         //    this.Height = inputBitmap.Height;
 
         //    //Padding for width is recalculated.
-        //    WidthWithPad = Width;
-        //    while ((WidthWithPad % 8) != 0)
-        //    {
-        //        WidthWithPad++;
-        //    }
+        //    WidthWithPad = Width + CalculatePad(Width);
 
         //    Rectangle rect = new Rectangle(0, 0, inputBitmap.Width, inputBitmap.Height);
 
@@ -587,13 +573,17 @@ namespace BarebonesImageLibrary
             if (scale == 0)
                 return;
 
+            //Go through the image and remove all the rows that are an multiple of scale.
             for (int y = Height; y > 0; y--)
             {
                 if (y % scale == 0)
-                    ImageMatrix.RemoveAt(y-1);
+                    ImageMatrix.RemoveAt(y - 1);
             }
 
+            //The number of rows of the picture has been changed so height must be recalulated.
             Height = Convert.ToInt32(Math.Truncate((double)this.Height * ((double)1 - ((double)1 / (double)scale))));
+
+            return;
         }
 
         /// <summary>
@@ -620,6 +610,62 @@ namespace BarebonesImageLibrary
             return true;
         }
 
+        /// <summary>
+        /// Pads the image with a specified amount of rows at a specified row position.
+        /// </summary>
+        /// <param name="x">The row where the padding should be inserted</param>
+        /// <param name="amount">The amount of rows to insert.</param>
+        public void PadHeight(int x, int amount)
+        {
+            byte[] zeroByteRow = new byte[this.WidthWithPad / 8];
+
+            for (int i = 0; i < amount; i++)
+                this.ImageMatrix.Insert(x, zeroByteRow.ToList());
+
+            this.Height = this.Height + amount;
+
+            return;
+        }
+
+        /// <summary>
+        /// Moves an image up or down.
+        /// </summary>
+        /// <param name="upOrDown">"up" or "down", everything else throws an expection.</param>
+        /// <param name="amount">How much to move the image in pixels.</param>
+        public void MoveImage(string upOrDown, int amount)
+        {
+            if (upOrDown == "up")
+            {
+                //Removes rows at the top of the image and then inserts zero padding at the bottom to compensate.
+                for (int i = 0; i < amount; i++)
+                {
+                    this.ImageMatrix.RemoveAt(0);
+                }
+                this.Height = this.Height - amount;
+                PadHeight(this.ImageMatrix.Count - 1, amount);
+            }
+            else if (upOrDown == "down")
+            {
+                //Removes bottom rows and the inserts zero padding at the top to compensate.
+                for (int i = 0; i < amount; i++)
+                {
+                    this.ImageMatrix.RemoveAt(this.ImageMatrix.Count - 1);
+                }
+                this.Height = this.Height - amount;
+                PadHeight(0, amount);
+            }
+            else
+                throw new ArgumentException("Argument must be 'up' or 'down'.");
+
+        }
+
+        /// <summary>
+        /// Calculates the coverage of an area, that is the number of pixels that are active.
+        /// The area is just a 3by3 for now.
+        /// </summary>
+        /// <param name="x">The x position of the pixel in the middle of the area.</param>
+        /// <param name="y">The y position of the pixel in the middle of the area.</param>
+        /// <returns>Amount of active pixels in the area.</returns>
         public ushort GetColourOfArea(int x, int y)
         {
             x--;

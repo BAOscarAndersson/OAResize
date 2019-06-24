@@ -373,13 +373,14 @@ namespace OAResize
         /// </summary>
         /// <param name = "fileToProcess" > The filename of the.TIF file to process, path not included.</param>
         /// <returns>True upon completion.</returns>
-        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord)
+        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord, int DPI)
         {
             BarebonesImage processImage = new BarebonesImage();
             ReadPressConfigXML readPressConfigXML = new ReadPressConfigXML();
 
             Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing " + fileTo);
 
+            #region parsing of the file name to get information of how to process the file
             string tower = fileTo.Substring(parsingInfo.towerStart, parsingInfo.towerLength);
             string cylinder = fileTo.Substring(parsingInfo.cylinderStart, parsingInfo.cylinderLength);
             char section = fileTo.Substring(parsingInfo.sectionStart, parsingInfo.sectionLength)[0];
@@ -423,73 +424,57 @@ namespace OAResize
                 Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - Processing of " + fileTo + " complete.");
                 return true;
             }
+            #endregion
 
             string pathAndFileTo = Path.Combine(dirPaths.middle, fileTo);
 
             //Load the image that was moved from the source folder.
             processImage = processImage.ReadATIFF(pathAndFileTo);
-            
-            int originalHeight = processImage.Height;
-
-            /* The mm's are converted to a a scale-factor.
-             * The calculations are done for 1200dpi for now. 
-             * 1200 Dots per inch = 47.2441 Dots per mm. 
-             * So the number of pixels to reduce the image by, each pixel representing a dot,
-             * is 47.2441 * fanOutDecimal. This is then truncated.
-             * Height size will be multiplied with 1-(1/scale) */
-            decimal resizeFactor = 47.2441m * fanOutDecimal;
-            decimal scale = 1 - (originalHeight - resizeFactor) / originalHeight;
-            scale = 1 / scale;
-            scale = Math.Truncate(scale);
-            int scaleInt = (int)scale;
 
             //Remove the register marks before it's resized since that's when you know where they are without having to calculate.
             processImage = RemoveRegisterMarks(processImage, dirPaths, regMarkCoord);
 
+            int originalHeight = processImage.Height;
+
+            //Scale is calculated based on how much fan-out there is to be compensated for.
+            int scale = MMtoScale(fanOutDecimal, originalHeight, DPI);
+
             //Image is resized.
-            processImage.DownsizeHeight(scaleInt);
+            processImage.DownsizeHeight(scale);
 
             //The image will be padded at different place depending on where in the machine the plate will go.
-            string MoveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
-
-            byte[] zeroByteRow = new byte[processImage.WidthWithPad / 8];
+            string moveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
+            int moveThisMuch = 10000;//= ComputeHowMuch(rollPosition, section, fanOutDecimal, DPI);
 
             int sizeDifference = originalHeight - processImage.Height;
 
-            switch (MoveThisWay)
+            switch (moveThisWay)
             {
                 case "up":
-                    Console.WriteLine("UP");
-                    for (int i = 0; i < sizeDifference; i++)
-                        processImage.ImageMatrix.Insert(processImage.ImageMatrix.Count, zeroByteRow.ToList());
+                    Console.WriteLine(moveThisWay);
+                    processImage.PadHeight(0, sizeDifference);
+                    processImage.MoveImage(moveThisWay, moveThisMuch);
                     break;
                 case "down":
-                    Console.WriteLine("DOWN");
-                    for (int i = 0; i < sizeDifference; i++)
-                        processImage.ImageMatrix.Insert(0, zeroByteRow.ToList());
-                    
+                    Console.WriteLine(moveThisWay);
+                    processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference);
+                    processImage.MoveImage(moveThisWay, moveThisMuch);
                     break;
                 case "middle":
-                    Console.WriteLine("MIddle");
-                    for (int i = 0; i < sizeDifference / 2; i++)
-                        processImage.ImageMatrix.Insert(0, zeroByteRow.ToList());
-                    for (int i = 0; i < sizeDifference / 2; i++)
-                        processImage.ImageMatrix.Insert(processImage.ImageMatrix.Count, zeroByteRow.ToList());
+                    Console.WriteLine(moveThisWay);
+                    processImage.PadHeight(0, sizeDifference / 2);
+                    processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference / 2);
                     break;
                 default:
-                    Console.WriteLine("Default");
-                    for (int i = 0; i < sizeDifference / 2; i++)
-                        processImage.ImageMatrix.Insert(0, zeroByteRow.ToList());
-                    for (int i = 0; i < sizeDifference / 2; i++)
-                        processImage.ImageMatrix.Insert(processImage.ImageMatrix.Count, zeroByteRow.ToList());
+                    Console.WriteLine(moveThisWay);
+                    processImage.PadHeight(0, sizeDifference / 2);
+                    processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference / 2);
                     break;
             }
 
-            //Since it's been padded, the image once again has its original height.
-            processImage.Height = originalHeight;
-
+            //The register marks are put back at the place where they are supposed to be.
             processImage = InsertRegisterMarks(processImage, dirPaths, regMarkCoord);
-
+            
             //Saves the result of the above processing.
             processImage.SaveAsTIFF(pathAndFileTo);
 
@@ -545,6 +530,9 @@ namespace OAResize
         {
             string resultString;
 
+            /* The arcane logic here within is based on how the paper in a web-feed press expands,
+             * where and what the positions of the cylinders are and other suchs things.*/
+
             if (rollPosition.Length == 1)
             {
                 return "middle";
@@ -583,6 +571,38 @@ namespace OAResize
             }
 
             return resultString;
+        }
+
+        /// <summary>
+        /// Computes how much an image need to be moved to compensate for fanout that takes place in sections inside of it.
+        /// </summary>
+        /// <param name="rollPosition">The size of the roll and its position in the machine.</param>
+        /// <param name="section">The section that the image is in.</param>
+        /// <param name="fanOut">How much a section expands.</param>
+        /// <param name="DPI">Dots per inch, non standard unit but what can you do.</param>
+        /// <returns>A certain amount of pixels.</returns>
+        private int ComputeHowMuch(string rollPosition, char section, decimal fanOut, int DPI)
+        {
+            int pixelFanOut = MMtoPixels(fanOut, DPI);
+
+            if (rollPosition.Length == 1 || rollPosition.Length == 2)
+            {
+                return 0;
+            }
+            else if (rollPosition.Length == 3)
+            {
+                if (section == rollPosition[1])
+                    return 0;
+                else
+                    return pixelFanOut /2;
+            }
+            else
+            {
+                if (section == rollPosition[0] || section == rollPosition[3])
+                    return pixelFanOut;
+                else
+                    return 0;
+            }
         }
 
         /// <summary>
@@ -630,6 +650,54 @@ namespace OAResize
             
             return inputImage;
         }
+
+        /// <summary>
+        /// Calculates how many pixels to remove from an image to get it to the size it needs to be to compensate for the fanout.
+        /// </summary>
+        /// <param name="fanOutDecimal">How much fanout there is per section in mm's.</param>
+        /// <param name="height">Height of the image in pixels.</param>
+        /// <param name="DPI">Dots per inch of the image.</param>
+        /// <returns>The amount of pixels to reduce the image with.</returns>
+        private int MMtoScale(decimal fanOutDecimal, int height, int DPI)
+        {
+            /* dpi's are first recalculated to dpmm. */
+            decimal dpmm = DPI * 0.0393701m;
+
+            decimal resizeFactor = dpmm * fanOutDecimal;
+
+            /* The scale is the the difference between the original image
+             * and the image we want to end up with.*/
+            decimal scale = 1 - (height - resizeFactor) / height;
+            scale = 1 / scale;
+
+            //The pixels is converted to int
+            scale = Math.Truncate(scale);
+            int scaleInt = (int)scale;
+
+            return scaleInt;
+        }
+
+        /// <summary>
+        /// Converts milimeters to pixels in a certain resolution.
+        /// </summary>
+        /// <param name="milimeter">An amount of milimeters.</param>
+        /// <param name="DPI">A certain resolution.</param>
+        /// <returns>An amount of pixels.</returns>
+        private int MMtoPixels(decimal milimeter, int DPI)
+        {
+            /* dpi's are first recalculated to dpmm. */
+            decimal dpmm = DPI * 0.0393701m;
+
+            // (y * dots / mm) * (x * mm) = y*x dots, which is to say amount of pixels.
+            decimal pixels = dpmm * milimeter;
+
+            //The pixels is converted to int
+            pixels = Math.Truncate(pixels);
+            int pixelsInt = (int)pixels;
+
+            return pixelsInt;
+        }
+
     }
 
     /// <summary>
@@ -674,7 +742,9 @@ namespace OAResize
             parsingInfo.halfStart = readConfig.ReadNumber("parseHalfStart");
             parsingInfo.halfStart -= 1;
             parsingInfo.halfLength = readConfig.ReadNumber("parseHalfLength");
-            
+
+            int DPI = readConfig.ReadNumber("DPI");
+
             #endregion
 
             //Forever loop for now. Main loop of the program.
@@ -688,7 +758,7 @@ namespace OAResize
                 if (fileToProcess != null)
                 {
 
-                    phase.Process(fileToProcess, parsingInfo, dirPaths, regMarkCoord);
+                    phase.Process(fileToProcess, parsingInfo, dirPaths, regMarkCoord, DPI);
 
                 }
 
