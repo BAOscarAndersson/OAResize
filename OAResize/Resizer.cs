@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
 using System.IO;
 using System.Diagnostics;
 using System.Configuration;
@@ -133,9 +134,25 @@ namespace OAResize
                         string sourceFile = Path.Combine(dirPaths.source, fileName);
                         string middleFile = Path.Combine(dirPaths.middle, fileName);
 
-                        //Wait a bit before trying to move the file to avoid any IO problems.
-                        System.Threading.Thread.Sleep(200);
-                        File.Move(sourceFile, middleFile);
+                        //Attempt to move the file a few times, catching the IOException.
+                        int attempts = 0;
+                        do {
+                            Thread.Sleep(100);
+                            try{
+                                File.Move(sourceFile, middleFile);
+                                //If the above is successful the loop can exit immediately.
+                                attempts = 9;
+                            }
+                            catch (IOException)
+                            {
+                                attempts++;
+                            }
+
+                        } while (attempts < 4);
+
+                        //One final attempt for the road or we'll have to crash.
+                        if(attempts != 9)
+                            File.Move(sourceFile, middleFile);
 
                         Console.WriteLine(DateTime.Now.ToString("yyyyMMdd HH:mm:ss") + " - " + allFilesInDir[0] + " moved to buffer.");
 
@@ -154,9 +171,6 @@ namespace OAResize
                         //Get the full filenames for both files.
                         string middleFile = Path.Combine(dirPaths.middle, fileName);
                         string destFile = Path.Combine(dirPaths.target, fileName);
-
-                        //Wait a bit before trying to move the file to avoid any IO problems.
-                        System.Threading.Thread.Sleep(100);
 
                         //Move the file to a .tmp file and then "move" it again to rename it. The CTP wants it thus.
                         File.Move(middleFile, destFile + @".tmp");
@@ -444,7 +458,7 @@ namespace OAResize
 
             //The image will be padded at different place depending on where in the machine the plate will go.
             string moveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
-            int moveThisMuch = 10000;//= ComputeHowMuch(rollPosition, section, fanOutDecimal, DPI);
+            int moveThisMuch = ComputeHowMuch(rollPosition, section, fanOutDecimal, DPI);
 
             int sizeDifference = originalHeight - processImage.Height;
 
