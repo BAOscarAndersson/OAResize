@@ -453,12 +453,27 @@ namespace OAResize
             //Scale is calculated based on how much fan-out there is to be compensated for.
             int scale = MMtoScale(fanOutDecimal, originalHeight, DPI);
 
+            Console.WriteLine(@"'.--------------------------.'");
+            Console.WriteLine("Fanout: " + fanOutDecimal);
+            Console.WriteLine("Scale: " + scale);
+            Console.WriteLine("Original height:" + originalHeight);
+
+            Console.WriteLine("Original height in mm:" + ((decimal)originalHeight / (1200m * 0.0393701m)));
+
             //Image is resized.
             processImage.DownsizeHeight(scale);
+
+            Console.WriteLine("Resized height:" + processImage.Height);
+            Console.WriteLine("Resized height in mm:" + ((decimal)processImage.Height / (1200m * 0.0393701m)));
+
 
             //The image will be padded at different place depending on where in the machine the plate will go.
             string moveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
             int moveThisMuch = ComputeHowMuch(rollPosition, section, fanOutDecimal, DPI);
+
+            Console.WriteLine("moveThisMuch in pixels:" + moveThisMuch);
+            Console.WriteLine("moveThisMuch in mm:" + ((decimal)moveThisMuch / (1200m * 0.0393701m)));
+            Console.WriteLine(@"'.--------------------------.'");
 
             int sizeDifference = originalHeight - processImage.Height;
 
@@ -466,12 +481,12 @@ namespace OAResize
             {
                 case "up":
                     Console.WriteLine(moveThisWay);
-                    processImage.PadHeight(0, sizeDifference);
+                    processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference);
                     processImage.MoveImage(moveThisWay, moveThisMuch);
                     break;
                 case "down":
                     Console.WriteLine(moveThisWay);
-                    processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference);
+                    processImage.PadHeight(0, sizeDifference); 
                     processImage.MoveImage(moveThisWay, moveThisMuch);
                     break;
                 case "middle":
