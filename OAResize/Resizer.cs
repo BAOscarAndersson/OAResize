@@ -309,6 +309,24 @@ namespace OAResize
 
             return 0; //Should not happen.
         }
+
+        internal float ReadFloat(string key)
+        {
+            string readValueAsString = this.ReadString(key);
+
+            if (float.TryParse(readValueAsString, out float tempInt))
+            {
+                return tempInt;
+            }
+            else
+            {
+                Console.WriteLine(key + " could not be parsed. Press any key to exit.");
+                Console.ReadKey();
+                Environment.Exit(0);
+            }
+
+            return 0; //Should not happen.
+        }
     }
 
     /// <summary>
@@ -338,12 +356,20 @@ namespace OAResize
         internal Tuple<int, int> trail;
     }
 
+    internal struct TextIndicatingCompensation
+    {
+        internal string text;
+        internal float fontSize;
+        internal int x;
+        internal int y;
+    }
+
     /// <summary>
     /// The program goes through three phases, connected to it's three folders source, middle and target.
     /// </summary>
     internal class Phase
     {
-        private readonly Tuple<int, int> textPlacement;
+        private readonly TextIndicatingCompensation textIndicator;
         private readonly RegisterMarksCoordinates regMarkCoord;
         private readonly ParsingInformation parsingInfo;
         private readonly DirPaths dirPaths;
@@ -352,16 +378,15 @@ namespace OAResize
         private readonly MoveFile moveFile;
 
 
-        internal Phase(Tuple<int, int> inTextPlacement, RegisterMarksCoordinates inRegMarkCoord, ParsingInformation inParsingInfo, DirPaths inDirPaths, int inDPI, Action<string> inLog, MoveFile inMoveFile)
+        internal Phase(TextIndicatingCompensation inTextIndicator, RegisterMarksCoordinates inRegMarkCoord, ParsingInformation inParsingInfo, DirPaths inDirPaths, int inDPI, Action<string> inLog, MoveFile inMoveFile)
         {
-            this.textPlacement = inTextPlacement;
+            this.textIndicator = inTextIndicator;
             this.regMarkCoord = inRegMarkCoord;
             this.parsingInfo = inParsingInfo;
             this.dirPaths = inDirPaths;
             this.DPI = inDPI;
             this.logg = inLog;
             this.moveFile = inMoveFile;
-
         }
 
         /// <summary>
@@ -421,11 +446,6 @@ namespace OAResize
             char section = fileTo.Substring(parsingInfo.sectionStart, parsingInfo.sectionLength)[0];
             string half = fileTo.Substring(parsingInfo.halfStart, parsingInfo.halfLength);
 
-            Console.WriteLine("Tower: " + tower);
-            Console.WriteLine("Cylinder: " + cylinder);
-            Console.WriteLine("Section: " + section);
-            Console.WriteLine("Half: " + half);
-
             string rollPosition = readPressConfigXML.GetValue(tower, "rollPosition", dirPaths);
 
             if (!Int32.TryParse(cylinder, out int cylinderInt))
@@ -467,56 +487,53 @@ namespace OAResize
             processImage = processImage.ReadATIFF(pathAndFileTo);
 
             //Remove the register marks before it's resized since that's when you know where they are without having to calculate.
-            processImage = RemoveRegisterMarks(processImage, dirPaths, regMarkCoord);
+            processImage = RemoveRegisterMarks(processImage, dirPaths, regMarkCoord);;
 
             int originalHeight = processImage.Height;
 
             //Scale is calculated based on how much fan-out there is to be compensated for.
             int scale = MMtoScale(fanOutDecimal, originalHeight, DPI);
-
-            Console.WriteLine(@"'.--------------------------.'");
-            Console.WriteLine("Fanout: " + fanOutDecimal);
-            Console.WriteLine("Scale: " + scale);
-            Console.WriteLine("Original height:" + originalHeight);
-
-            Console.WriteLine("Original height in mm:" + ((decimal)originalHeight / (1200m * 0.0393701m)));
-
-            //Image is resized.
-            processImage.DownsizeHeight(scale);
-
-            Console.WriteLine("Resized height:" + processImage.Height);
-            Console.WriteLine("Resized height in mm:" + ((decimal)processImage.Height / (1200m * 0.0393701m)));
-
-
+            
             //The image will be padded at different place depending on where in the machine the plate will go.
             string moveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
             int moveThisMuch = ComputeHowMuch(rollPosition, section, fanOutDecimal, DPI);
 
+            Console.WriteLine(@"----------------------------------------------------------");
+            Console.WriteLine("Tower: " + tower);
+            Console.WriteLine("Cylinder: " + cylinder);
+            Console.WriteLine("Section: " + section);
+            Console.WriteLine("Half: " + half);
+            Console.WriteLine("Fanout: " + fanOutDecimal);
             Console.WriteLine("Translation in pixels:" + moveThisMuch);
-            Console.WriteLine("Translation in mm:" + ((decimal)moveThisMuch / (1200m * 0.0393701m)));
-            Console.WriteLine(@"'.--------------------------.'");
+            Console.WriteLine("Translation in mm:" + ((decimal)moveThisMuch / (1200m * 0.0393701m)).ToString("F"));
+            Console.WriteLine(moveThisWay);
+            Console.WriteLine(@"----------------------------------------------------------");
+
+            //Text is drawn onto the plate to indicate that it has been compensated. By the same logic as the register marks, it's drawn before any resizeing.
+            processImage.WriteText("Komp. fanout: " + fanOutDecimal.ToString("F") + 
+                                   " sidled: " + ((decimal)moveThisMuch / (1200m * 0.0393701m)).ToString("F")
+                                   , textIndicator.x, textIndicator.y, textIndicator.fontSize);
+
+            //Image is resized.
+            processImage.DownsizeHeight(scale);
 
             int sizeDifference = originalHeight - processImage.Height;
 
             switch (moveThisWay)
             {
                 case "up":
-                    Console.WriteLine(moveThisWay);
                     processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference);
                     processImage.MoveImage(moveThisWay, moveThisMuch);
                     break;
                 case "down":
-                    Console.WriteLine(moveThisWay);
                     processImage.PadHeight(0, sizeDifference); 
                     processImage.MoveImage(moveThisWay, moveThisMuch);
                     break;
                 case "middle":
-                    Console.WriteLine(moveThisWay);
                     processImage.PadHeight(0, sizeDifference / 2);
                     processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference / 2);
                     break;
                 default:
-                    Console.WriteLine(moveThisWay);
                     processImage.PadHeight(0, sizeDifference / 2);
                     processImage.PadHeight(processImage.ImageMatrix.Count, sizeDifference / 2);
                     break;
@@ -524,9 +541,6 @@ namespace OAResize
 
             //The register marks are put back at the place where they are supposed to be.
             processImage = InsertRegisterMarks(processImage, dirPaths, regMarkCoord);
-            
-            //Text is drawn onto the plate to indicate that it has been compensated.
-
 
             //Saves the result of the above processing.
             processImage.SaveAsTIFF(pathAndFileTo);
@@ -769,6 +783,7 @@ namespace OAResize
             ParsingInformation parsingInfo = new ParsingInformation();
             Action<string> logg = (str) => Logg.Text(str, dirPaths);
             RegisterMarksCoordinates regMarkCoord = new RegisterMarksCoordinates();
+            TextIndicatingCompensation readTextIndicator = new TextIndicatingCompensation();
             #endregion
 
             #region Load a bunch of parameters from the config file and instanciate a phase class.
@@ -798,9 +813,13 @@ namespace OAResize
 
             int DPI = readConfig.ReadNumber("DPI");
 
-            Tuple<int, int> readTextPlacement = new Tuple<int, int>(readConfig.ReadNumber("textPlacementX"), readConfig.ReadNumber("textPlacementY"));
+            readTextIndicator.text = readConfig.ReadString("textToWrite");
+            readTextIndicator.fontSize = readConfig.ReadFloat("textFontSize");
+            readTextIndicator.x = readConfig.ReadNumber("textPlacementX");
+            readTextIndicator.y = readConfig.ReadNumber("textPlacementY");
+            
 
-            Phase phase = new Phase(readTextPlacement, regMarkCoord, parsingInfo, dirPaths, DPI, logg, fileMove);
+            Phase phase = new Phase(readTextIndicator, regMarkCoord, parsingInfo, dirPaths, DPI, logg, fileMove);
             #endregion
 
             //Forever loop for now. Main loop of the program.

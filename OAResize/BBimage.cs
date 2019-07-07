@@ -258,21 +258,23 @@ namespace BarebonesImageLibrary
         }
 
         /// <summary>
-        /// Writes the input string to the barebones image at a certain location.
+        /// Writes the input string on the barebones image at a certain location.
         /// </summary>
-        /// <param name="textToWrite">A string to write to the barebones image.</param>
-        /// <param name="fontSize">The size of the font to be written to the barebones image.</param>
+        /// <param name="textToWrite">A string to write on the barebones image.</param>
+        /// <param name="fontSize">The size of the font to be written on the barebones image.</param>
         /// <param name="x">The width position to write the string at.</param>
         /// <param name="y">The height position to write the string at.</param>
         /// <returns>True upon completion.</returns>
-        public bool WriteText(string textToWrite, int x, int y, int fontSize)
+        public bool WriteText(string textToWrite, int x, int y, float fontSize)
         {
             //Initialize an bitmap image and a graphic object that the input text will be drawn on.
-            Bitmap image = new Bitmap(textToWrite.Length * fontSize, fontSize * 2);
+            Bitmap image = new Bitmap(textToWrite.Length * (int) fontSize, (int) fontSize * 2);
             Graphics graph = Graphics.FromImage(image);
 
             //Draws the text onto the bitmap image
             graph.DrawString(textToWrite, new Font(new FontFamily("Calibri"), fontSize, FontStyle.Regular), Brushes.Black, 0, 0);
+
+            int intFontSize = (int)fontSize;
 
             //Goes through all the pixels in the image and transfers them to the barebones image.
             for (int i = 0; i < textToWrite.Length * fontSize; i++)
@@ -283,11 +285,14 @@ namespace BarebonesImageLibrary
                     Color colour = image.GetPixel(i, j);
                     int aRGBvalue = colour.ToArgb();
 
+                    if (intFontSize * 2 - j + x > Width || i + y > Height)
+                        return true;
+
                     //Rotate the text so it ends up at the bottom of the printing plate.
                     if (aRGBvalue == 0)
-                        SetPixel(fontSize * 2 - j + x, i + y, false);
+                        SetPixel(intFontSize * 2 - j + x, i + y, false);
                     else
-                        SetPixel(fontSize * 2 - j + x, i + y, true);
+                        SetPixel(intFontSize * 2 - j + x, i + y, true);
                 }
             }
 
