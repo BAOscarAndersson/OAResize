@@ -343,6 +343,27 @@ namespace OAResize
     /// </summary>
     internal class Phase
     {
+        private readonly Tuple<int, int> textPlacement;
+        private readonly RegisterMarksCoordinates regMarkCoord;
+        private readonly ParsingInformation parsingInfo;
+        private readonly DirPaths dirPaths;
+        private readonly int DPI;
+        private readonly Action<string> logg;
+        private readonly MoveFile moveFile;
+
+
+        internal Phase(Tuple<int, int> inTextPlacement, RegisterMarksCoordinates inRegMarkCoord, ParsingInformation inParsingInfo, DirPaths inDirPaths, int inDPI, Action<string> inLog, MoveFile inMoveFile)
+        {
+            this.textPlacement = inTextPlacement;
+            this.regMarkCoord = inRegMarkCoord;
+            this.parsingInfo = inParsingInfo;
+            this.dirPaths = inDirPaths;
+            this.DPI = inDPI;
+            this.logg = inLog;
+            this.moveFile = inMoveFile;
+
+        }
+
         /// <summary>
         /// Does input things and validates the paths.
         /// </summary>
@@ -350,7 +371,7 @@ namespace OAResize
         /// <param name="dirPaths">Where the folders of the programs are located.</param>
         /// <param name="moveFile">Moves file from the source to the middle.</param>
         /// <returns>The name of the file if a file was moved, null otherwise.</returns>
-        internal string Input(Action<string> logg, DirPaths dirPaths, MoveFile moveFile)
+        internal string Input()
         {
             #region Validation of the maps
             /*The output map is often a mapped network drive,
@@ -387,7 +408,7 @@ namespace OAResize
         /// </summary>
         /// <param name = "fileToProcess" > The filename of the.TIF file to process, path not included.</param>
         /// <returns>True upon completion.</returns>
-        internal bool Process(string fileTo, ParsingInformation parsingInfo, DirPaths dirPaths, RegisterMarksCoordinates regMarkCoord, int DPI)
+        internal bool Process(string fileTo)
         {
             BarebonesImage processImage = new BarebonesImage();
             ReadPressConfigXML readPressConfigXML = new ReadPressConfigXML();
@@ -471,8 +492,8 @@ namespace OAResize
             string moveThisWay = ComputeWhichWay(rollPosition, section, cylinderInt);
             int moveThisMuch = ComputeHowMuch(rollPosition, section, fanOutDecimal, DPI);
 
-            Console.WriteLine("moveThisMuch in pixels:" + moveThisMuch);
-            Console.WriteLine("moveThisMuch in mm:" + ((decimal)moveThisMuch / (1200m * 0.0393701m)));
+            Console.WriteLine("Translation in pixels:" + moveThisMuch);
+            Console.WriteLine("Translation in mm:" + ((decimal)moveThisMuch / (1200m * 0.0393701m)));
             Console.WriteLine(@"'.--------------------------.'");
 
             int sizeDifference = originalHeight - processImage.Height;
@@ -504,6 +525,9 @@ namespace OAResize
             //The register marks are put back at the place where they are supposed to be.
             processImage = InsertRegisterMarks(processImage, dirPaths, regMarkCoord);
             
+            //Text is drawn onto the plate to indicate that it has been compensated.
+
+
             //Saves the result of the above processing.
             processImage.SaveAsTIFF(pathAndFileTo);
 
@@ -519,7 +543,7 @@ namespace OAResize
         /// <param name="dirPaths">Where the folders of the programs are located.</param>
         /// <param name="moveFile">Moves file from the source to the middle.</param>
         /// <returns>The name of the file if a file was moved, null otherwise.</returns>
-        internal string Output(Action<string> logg, DirPaths dirPaths, MoveFile moveFile)
+        internal string Output()
         {
             return moveFile.FromDir(dirPaths.middle, logg, dirPaths);
         }
@@ -741,13 +765,13 @@ namespace OAResize
             ReadConfig readConfig = new ReadConfig();
             DirPaths dirPaths = new DirPaths(readConfig);
             MoveFile fileMove = new MoveFile();
-            Phase phase = new Phase();
+            
             ParsingInformation parsingInfo = new ParsingInformation();
             Action<string> logg = (str) => Logg.Text(str, dirPaths);
             RegisterMarksCoordinates regMarkCoord = new RegisterMarksCoordinates();
             #endregion
 
-            #region Load a bunch of parameters from the config file.
+            #region Load a bunch of parameters from the config file and instanciate a phase class.
             //Load registermark coordinates from the config file.
             regMarkCoord.lead = new Tuple<int, int>(readConfig.ReadNumber("leadRegMarkX"), readConfig.ReadNumber("leadRegMarkY"));
             regMarkCoord.trail = new Tuple<int, int>(readConfig.ReadNumber("trailRegMarkX"), readConfig.ReadNumber("trailRegMarkY"));
@@ -774,6 +798,9 @@ namespace OAResize
 
             int DPI = readConfig.ReadNumber("DPI");
 
+            Tuple<int, int> readTextPlacement = new Tuple<int, int>(readConfig.ReadNumber("textPlacementX"), readConfig.ReadNumber("textPlacementY"));
+
+            Phase phase = new Phase(readTextPlacement, regMarkCoord, parsingInfo, dirPaths, DPI, logg, fileMove);
             #endregion
 
             //Forever loop for now. Main loop of the program.
@@ -781,18 +808,18 @@ namespace OAResize
             do
             {
                 //Checks that all the folders are present and then moves any file from the source to middle.
-                string fileToProcess = phase.Input(logg, dirPaths, fileMove);
+                string fileToProcess = phase.Input();
 
                 //If there is a file in the source folder the processing begins.
                 if (fileToProcess != null)
                 {
 
-                    phase.Process(fileToProcess, parsingInfo, dirPaths, regMarkCoord, DPI);
+                    phase.Process(fileToProcess);
 
                 }
 
                 //Any file in the middle should have by this time undergone processing and so is outputed.
-                phase.Output(logg, dirPaths, fileMove);
+                phase.Output();
 
                 //Let the CPU get some rest. ("sleepTime" is set in OARConfig.txt)
                 System.Threading.Thread.Sleep(sleepTime);
